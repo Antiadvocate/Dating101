@@ -147,7 +147,13 @@ export default function Scene({ save, setSave, onOpenSpine }: {
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column", minHeight: 0 }}>
       {/* ── CHAPTER BAR ─────────────────────────────────────────────────── */}
-      <div className="center-page" style={{ padding: "9px 20px 0", flex: "none" }}>
+      <div className="center-page" style={{
+        padding: "9px 20px 0", flex: "none",
+        /* Opaque, and above the page. The bar sits over a scrolling column and the
+           top-edge mask only softens the first few pixels — without a ground of its
+           own, narration scrolls up and prints straight through the chapter title. */
+        background: "var(--paper)", position: "relative", zIndex: 2,
+      }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 7 }}>
           <button className="label label-accent" onClick={onOpenSpine} style={{ flex: "none" }}>
             Ch. {beat.idx + 1} / {arc.beats.length}
