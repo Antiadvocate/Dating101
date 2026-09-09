@@ -1,12 +1,26 @@
 name: Deploy to Pages
 
-# Pushes to main publish automatically. Any other branch can be published on
-# demand from Actions -> Deploy to Pages -> Run workflow -> pick the branch,
-# which is how a work-in-progress branch gets onto the live URL without being
-# merged first.
+# WHY THIS LISTS MORE THAN main.
+#
+# The first version of this triggered on pushes to main alone, which is the
+# sane default and was, here, a workflow that could never run: the repository
+# has no main branch. All the code is on a claude/* development branch, so the
+# trigger never matched, nothing ever built, and Pages sat waiting for an
+# artifact that was never going to arrive.
+#
+# So both are listed. Development branches deploy now, main deploys once it
+# exists, and if both are ever live at the same time the most recent push wins
+# the URL — which is the correct behaviour for a single-page game with one
+# deployment target, and worth knowing before you push to two branches in a row.
+#
+# A branch can also be published on demand from Actions -> Deploy to Pages ->
+# Run workflow -> pick the branch. The workflow file has to exist on the branch
+# being dispatched, which is why this one is committed everywhere.
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - "claude/**"
   workflow_dispatch:
 
 permissions:
