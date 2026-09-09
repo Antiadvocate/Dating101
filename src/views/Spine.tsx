@@ -45,7 +45,7 @@ export default function Spine({ save, setSave, onPlay }: {
 
   const frames = spineFrames(arc);
   return (
-    <div className="scroll fade-top" style={{ height: "100%", padding: "14px 20px 60px" }}>
+    <div className="scroll fade-top" style={{ height: "100%", padding: "74px 20px 60px" }}>
       <div style={{ maxWidth: 720, margin: "0 auto" }}>
         {routes.length > 1 && (
           <div style={{ display: "flex", gap: 6, marginBottom: 22, flexWrap: "wrap" }}>
@@ -190,7 +190,7 @@ function RoutePicker({ save, setSave, routes, busy, onPick }: {
   };
 
   return (
-    <div className="scroll fade-top" style={{ height: "100%", padding: "20px 20px 60px" }}>
+    <div className="scroll fade-top" style={{ height: "100%", padding: "74px 20px 60px" }}>
       <div style={{ maxWidth: 640, margin: "0 auto" }}>
         <div className="label label-accent" style={{ marginBottom: 10 }}>{save.world_bible.name}</div>
         <h1 className="display" style={{ fontSize: 36, marginBottom: 10 }}>Who are you going to try?</h1>

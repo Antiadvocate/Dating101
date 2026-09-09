@@ -13,7 +13,7 @@ export default function Shelf({ onOpen, onNew }: { onOpen: (id: string) => void;
   useEffect(() => { reload(); }, []);
 
   return (
-    <div className="scroll fade-top" style={{ height: "100%", padding: "24px 20px 60px" }}>
+    <div className="scroll fade-top" style={{ height: "100%", padding: "74px 20px 60px" }}>
       <div style={{ maxWidth: 620, margin: "0 auto" }}>
         <div className="label label-accent" style={{ marginBottom: 12 }}>Dating 101</div>
         <h1 className="display" style={{ fontSize: "clamp(34px, 8vw, 52px)", lineHeight: 1.02, marginBottom: 14 }}>

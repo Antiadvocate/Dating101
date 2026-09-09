@@ -83,7 +83,7 @@ export default function Casting({ onBack, onCast }: {
   if (busy) return <Forging phase={phase} names={filled.map((b) => b.name?.trim() || "…")} error={error} onBack={() => setBusy(false)} />;
 
   return (
-    <div className="scroll fade-top" style={{ height: "100%", padding: "10px 22px 60px" }}>
+    <div className="scroll fade-top" style={{ height: "100%", padding: "74px 22px 60px" }}>
       <div style={{ maxWidth: 640, margin: "0 auto" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "4px 0 26px" }}>
           <button className="chip" onClick={() => (idx === 0 ? onBack() : setStep(ORDER[idx - 1]))}>

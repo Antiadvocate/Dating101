@@ -47,7 +47,7 @@ export default function Dossier({ save, setSave }: { save: Save; setSave: (s: Sa
   };
 
   return (
-    <div className="scroll fade-top" style={{ height: "100%", padding: "16px 20px 60px" }}>
+    <div className="scroll fade-top" style={{ height: "100%", padding: "74px 20px 60px" }}>
       <div style={{ maxWidth: 680, margin: "0 auto" }}>
 
         <div style={{ display: "flex", gap: 22, flexWrap: "wrap", marginBottom: 34 }}>

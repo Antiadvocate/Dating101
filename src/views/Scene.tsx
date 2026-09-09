@@ -186,7 +186,7 @@ export default function Scene({ save, setSave, onOpenSpine }: {
 
       {/* ── PAGE + RAIL ─────────────────────────────────────────────────── */}
       <div className="center-page" style={{ flex: 1, minHeight: 0, display: "flex", gap: 30, padding: "0 20px" }}>
-        <div className="scroll fade-top" style={{ flex: 1, minWidth: 0, paddingTop: 32 }}>
+        <div className="scroll fade-top" style={{ flex: 1, minWidth: 0, paddingTop: 76 }}>
 
           {beat.opening && (
             <Opening beat={beat} onZoom={setLightbox} />
@@ -224,7 +224,7 @@ export default function Scene({ save, setSave, onOpenSpine }: {
         </div>
 
         {/* THE RAIL — the person, standing open beside the page. */}
-        <aside className="scroll rail" style={{ width: 268, flex: "none", paddingTop: 32, paddingBottom: 24 }}>
+        <aside className="scroll rail" style={{ width: 268, flex: "none", paddingTop: 76, paddingBottom: 24 }}>
           {her && (
             <Photo src={her.portrait_url} ratio="4 / 5" tilt="l" priority
               caption={`${her.name} · ${her.age}`}

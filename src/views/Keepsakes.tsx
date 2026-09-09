@@ -18,7 +18,7 @@ export default function Keepsakes({ save }: { save: Save }) {
   const shots = [...save.dating.keepsakes].reverse();
 
   return (
-    <div className="scroll fade-top" style={{ height: "100%", padding: "16px 20px 60px" }}>
+    <div className="scroll fade-top" style={{ height: "100%", padding: "74px 20px 60px" }}>
       <div style={{ maxWidth: 860, margin: "0 auto" }}>
         <div className="label label-accent" style={{ marginBottom: 8 }}>Keepsakes</div>
         <h1 className="display" style={{ fontSize: 32, marginBottom: 8 }}>

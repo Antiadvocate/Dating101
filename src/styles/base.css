@@ -276,10 +276,15 @@ button:disabled { cursor: default; opacity: .4; }
 .scroll::-webkit-scrollbar-thumb { background: var(--ink-faint); border-radius: 0; }
 .scroll::-webkit-scrollbar-track { background: transparent; }
 
-/* A page whose top edge fades out under the title bar rather than being cut by
-   it, so text sliding under the bar looks intended. */
-.fade-top { -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 26px);
-            mask-image: linear-gradient(to bottom, transparent 0, #000 26px); }
+/* A page whose top edge dissolves under the title bar rather than being cut by
+   it. The fade has to be longer than one line — at 26px it sliced a line of
+   prose in half horizontally, which reads as a rendering bug rather than as
+   depth — a word fragment at twenty percent opacity sitting directly under an
+   opaque bar reads as a rendering fault, not as depth. Over 72px, which is two
+   and a half lines of prose, it unambiguously dissolves. Every column using
+   this carries a top padding at least as large, so nothing is faded at rest. */
+.fade-top { -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 72px);
+            mask-image: linear-gradient(to bottom, transparent 0, #000 72px); }
 
 /* ── SHELL ───────────────────────────────────────────────────────────────────*/
 .shell {
