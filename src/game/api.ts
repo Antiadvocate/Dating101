@@ -28,6 +28,7 @@ import { activeArc, currentBeat, isDating, type DatingLayer, type Door, type Kee
 import { enterBeat, gateCheck, heatOf, openGate, resolveTerminal, takeDoor, terminalOf } from "./arc";
 import { beatDirective, doorsFor, endingFor, judgeBeat, openingFor } from "./gate";
 import { findTics, ticCorrection } from "./tics";
+import { adultAge, emptyAppetites, type Appetites } from "./appetite";
 import { runCasting, beginRoute, type CastingInput } from "./casting";
 
 const uid = (p: string) => `${p}_${Math.random().toString(36).slice(2, 10)}`;
@@ -35,6 +36,26 @@ const uid = (p: string) => `${p}_${Math.random().toString(36).slice(2, 10)}`;
 async function need(id: string): Promise<SaveState> {
   const s = await getSave(id);
   if (!s) throw new Error("that save is gone");
+  return heal(s);
+}
+
+/** Saves written before the appetite layer existed are missing whole objects
+ *  that half this module dereferences. Fill them in on load rather than
+ *  guarding at every read — the alternative is forty optional chains and one
+ *  that gets forgotten. */
+function heal(s: SaveState): SaveState {
+  const d = (s as SaveState & { dating?: DatingLayer }).dating;
+  if (!d) return s;
+  d.heat ??= { explicitness: "frank", palette: [], limits: [] };
+  d.heat.palette ??= [];
+  d.heat.limits ??= [];
+  d.appetites ??= {};
+  for (const arc of Object.values(d.routes ?? {})) {
+    arc.rung ??= 0;
+    d.appetites[arc.char_id] ??= emptyAppetites();
+    const a = d.appetites[arc.char_id];
+    a.into ??= []; a.curious ??= []; a.limits ??= []; a.discovered ??= [];
+  }
   return s;
 }
 
@@ -159,7 +180,7 @@ async function syncDirective(s: SaveState): Promise<void> {
     ? ticCorrection(findTics(s.history[s.history.length - 1].narrator_prose ?? ""))
     : "";
   s.world_bible.narrator_direction = [
-    beatDirective(s, arc, beat, s.dating.register),
+    beatDirective(s, arc, beat, s.dating),
     owed,
   ].filter(Boolean).join("\n\n");
 }
@@ -211,8 +232,26 @@ async function afterTurn(id: string, ev: PlayEvents): Promise<void> {
   if (!g.beat) return;
 
   let because: "discharged" | "ceiling" | null = null;
-  if (g.atCeiling) because = "ceiling";
-  else if (g.shouldAsk && await judgeBeat(s, smallModel(s))) because = "discharged";
+  if (g.shouldAsk || g.atCeiling) {
+    // The judge is one small call and it answers three questions at once: did
+    // the chapter's job happen, how far the two of them have physically gone,
+    // and what the scene put on the record about what either of them wants. It
+    // runs at the ceiling too — the chapter closes regardless there, but the
+    // rung and the revelations still have to be read off the page.
+    const verdict = await judgeBeat(s, smallModel(s));
+    const fresh = await need(id);
+    const a2 = activeArc(fresh);
+    if (a2 && isDating(fresh)) {
+      a2.rung = Math.max(a2.rung ?? 0, verdict.rung);
+      if (verdict.revealed.length) {
+        const app = (fresh.dating.appetites[a2.char_id] ??= emptyAppetites());
+        recordRevealed(app, verdict.revealed);
+      }
+      await putSave(fresh);
+    }
+    if (g.atCeiling) because = "ceiling";
+    else if (verdict.done) because = "discharged";
+  }
   if (!because) return;
 
   const fresh = await need(id);
@@ -220,6 +259,41 @@ async function afterTurn(id: string, ev: PlayEvents): Promise<void> {
   openGate(fresh, doors, because);
   await putSave(fresh);
   ev.onGate?.(doors, because);
+}
+
+/** Fold what a scene revealed into what the player is allowed to see.
+ *
+ *  The dossier shows only `discovered`, so this is the collection mechanic: the
+ *  truth of a person is on their card from turn one and the player earns access
+ *  to it a line at a time. A revelation matches an existing appetite loosely —
+ *  the judge writes "wants to be told what to do" and the card says "being
+ *  given orders" — so matching is on word overlap rather than equality, and an
+ *  unmatched revelation is still kept, because a person can turn out to want
+ *  something the forge never wrote down. */
+function recordRevealed(app: Appetites, revealed: string[]): void {
+  const words = (s: string) => new Set(s.toLowerCase().match(/[a-z]{4,}/g) ?? []);
+  const known = [...app.into, ...app.limits, ...app.curious];
+  for (const r of revealed) {
+    const rw = words(r);
+    const hit = known.find((k) => {
+      const kw = words(k);
+      let shared = 0;
+      for (const w of rw) if (kw.has(w)) shared++;
+      return shared >= 2 || (kw.size <= 2 && shared >= 1);
+    });
+    const entry = hit ?? r;
+    if (!app.discovered.some((d) => d.toLowerCase() === entry.toLowerCase())) {
+      app.discovered.push(entry);
+    }
+    // The unsaid thing surfacing is the one revelation worth a flag of its own.
+    if (app.unsaid && !app.unsaid_found) {
+      const uw = words(app.unsaid);
+      let shared = 0;
+      for (const w of rw) if (uw.has(w)) shared++;
+      if (shared >= 2) app.unsaid_found = true;
+    }
+  }
+  if (app.discovered.length > 40) app.discovered.splice(0, app.discovered.length - 40);
 }
 
 /* ── WALKING THROUGH A DOOR ──────────────────────────────────────────────────*/
@@ -320,3 +394,195 @@ export const editSave = weft.edit;
 export const rollback = weft.rollback;
 export const setTime = weft.setTime;
 export { weft };
+
+/* ── EDITING ─────────────────────────────────────────────────────────────────
+ *
+ *  Everything about a person is editable, which is not a debug affordance — it
+ *  is the point. The forge writes a first draft of somebody out of a paragraph
+ *  you typed, and it will get things wrong, and the difference between a game
+ *  you play once and one you keep is whether you can reach in and fix the
+ *  woman's voice on turn three instead of rerolling the whole town.
+ */
+
+/** Identity fields, through Weft's own editor so age reconciliation runs — the
+ *  number lives in a dozen prose copies (backgrounds, memories, edge notes,
+ *  canon) and moving only the number leaves the cast still saying the old one.
+ *  See vendor/weft/src/engine/age.ts, which is worth reading. */
+export async function editCharacter(
+  id: string, char_id: string, identity: Record<string, unknown>,
+): Promise<{ save: ClientSave; notice?: string }> {
+  const patch = { ...identity };
+  // The floor is enforced here as well as in casting, because this is the other
+  // door into the record.
+  if ("age" in patch) patch.age = adultAge(patch.age);
+  const save = await weft.rawEditCharacter(id, char_id, { identity: patch });
+  return { save, notice: save.edit_notice };
+}
+
+export async function editAppetites(id: string, char_id: string, patch: Partial<Appetites>): Promise<ClientSave> {
+  const s = await need(id);
+  if (!isDating(s)) throw new Error("not a dating save");
+  const a = (s.dating.appetites[char_id] ??= emptyAppetites());
+  Object.assign(a, patch);
+  a.into ??= []; a.curious ??= []; a.limits ??= []; a.discovered ??= [];
+  await putSave(s);
+  return weft.save(id);
+}
+
+/** The relationship itself, set by hand. Absolute values rather than deltas —
+ *  a debug control that nudges is a debug control you use eleven times. */
+export async function editEdge(
+  id: string, char_id: string,
+  patch: { warmth?: number; trust?: number; attraction?: number; roles?: string[]; notes?: string },
+): Promise<ClientSave> {
+  const s = await need(id);
+  const clamp = (n: number) => Math.max(-100, Math.min(100, Math.round(n)));
+  let e = s.world.edges.find((x) => x.from === char_id && x.to === "char_player");
+  if (!e) {
+    e = { from: char_id, to: "char_player", warmth: 0, trust: 0, power: 0, notes: "", updated_turn: s.world.current_turn };
+    s.world.edges.push(e);
+  }
+  if (patch.warmth != null) e.warmth = clamp(patch.warmth);
+  if (patch.trust != null) e.trust = clamp(patch.trust);
+  if (patch.attraction != null) {
+    e.attraction = clamp(patch.attraction);
+    // attraction_base caps how far warmth alone can lift wanting (see
+    // engine/desire.ts). Setting attraction by hand past a low base would be
+    // silently pulled back down, so raise the ceiling with it.
+    e.attraction_base = Math.max(e.attraction_base ?? 0, e.attraction);
+  }
+  if (patch.roles) e.roles = patch.roles.filter(Boolean);
+  if (patch.notes != null) { e.notes = patch.notes; e.notes_turn = s.world.current_turn; }
+  e.updated_turn = s.world.current_turn;
+  await putSave(s);
+  return weft.save(id);
+}
+
+/* ── THE CONSOLE ─────────────────────────────────────────────────────────────
+ *  Cheats, in the ordinary sense. A single-player game running on the player's
+ *  own key, on their own machine, has no reason to withhold any of this. */
+
+/** Move the physical ladder by hand. Useful when the judge misreads a scene, and
+ *  useful when you simply want to skip ahead. */
+export async function setRung(id: string, rung: number): Promise<ClientSave> {
+  const s = await need(id);
+  const arc = activeArc(s);
+  if (arc) arc.rung = Math.max(0, Math.min(6, Math.round(rung)));
+  await putSave(s);
+  return weft.save(id);
+}
+
+/** Jump to any chapter, played or not. Everything stepped over is marked
+ *  skipped rather than deleted, so the spine still shows the road not taken. */
+export async function jumpToBeat(id: string, idx: number): Promise<ClientSave> {
+  const s = await need(id);
+  const arc = activeArc(s);
+  if (!arc || !isDating(s)) return weft.save(id);
+  const to = Math.max(0, Math.min(arc.beats.length - 1, Math.round(idx)));
+  for (let i = arc.cursor; i < to; i++) {
+    if (arc.beats[i].status === "locked" || arc.beats[i].status === "open") arc.beats[i].status = "skipped";
+  }
+  for (let i = to; i < arc.beats.length; i++) {
+    if (i > to && arc.beats[i].status === "skipped") arc.beats[i].status = "locked";
+  }
+  s.dating.gate = null;
+  arc.state = "running";
+  delete arc.ending_kind;
+  delete arc.ending_prose;
+  enterBeat(s, to);
+  await putSave(s);
+  return openBeat(id);
+}
+
+/** Open the gate right now, whatever the floor says, and write fresh doors.
+ *  Also the fix for a gate whose doors came back unusable. */
+export async function forceGate(id: string, reroll = false): Promise<ClientSave> {
+  const s = await need(id);
+  const arc = activeArc(s);
+  if (!arc || !isDating(s)) return weft.save(id);
+  if (reroll) s.dating.gate = null;
+  await putSave(s);
+  const fresh = await need(id);
+  const doors = await doorsFor(fresh, smallModel(fresh), "discharged");
+  openGate(fresh, doors, "discharged");
+  await putSave(fresh);
+  return weft.save(id);
+}
+
+/** Throw away this chapter's opening and write another one. */
+export async function rewriteOpening(id: string, text?: string): Promise<ClientSave> {
+  const s = await need(id);
+  const arc = activeArc(s);
+  const beat = currentBeat(arc);
+  if (!beat || !isDating(s)) return weft.save(id);
+  beat.opening = text?.trim() || undefined;
+  s.dating.needs_opening = !beat.opening;
+  await putSave(s);
+  return beat.opening ? weft.save(id) : openBeat(id);
+}
+
+/** Hand the player everything on somebody's card. The dossier normally shows
+ *  only what play has surfaced; this is the "I want to read the answers" switch
+ *  and it is one-way on purpose — you cannot un-know it. */
+export async function revealAppetites(id: string, char_id: string): Promise<ClientSave> {
+  const s = await need(id);
+  if (!isDating(s)) return weft.save(id);
+  const a = (s.dating.appetites[char_id] ??= emptyAppetites());
+  a.discovered = [...new Set([...a.discovered, ...a.into, ...a.curious, ...a.limits])];
+  if (a.unsaid) a.unsaid_found = true;
+  await putSave(s);
+  return weft.save(id);
+}
+
+/** Weft's own sovereignty switch: the player's actions succeed, and the world
+ *  still reacts to them having succeeded. */
+export async function setGodMode(id: string, on: boolean): Promise<ClientSave> {
+  const s = await need(id);
+  s.world_bible.god_mode = on;
+  await putSave(s);
+  return weft.save(id);
+}
+
+/** Force a route to a given ending without playing the rest of it. */
+export async function forceEnding(id: string, kind: "win" | "loss" | "sour"): Promise<DoorResult> {
+  const s = await need(id);
+  const arc = activeArc(s);
+  if (!arc) throw new Error("no route in play");
+  const terminal = terminalOf(arc, kind);
+  if (!terminal) throw new Error("no such ending");
+  arc.state = kind === "win" ? "won" : kind === "loss" ? "lost" : "soured";
+  arc.ending_kind = kind;
+  arc.ended_turn = s.world.current_turn;
+  await putSave(s);
+  const prose = await endingFor(s, arc, terminal, bigModel(s));
+  const fin = await need(id);
+  const a = activeArc(fin);
+  if (a) { a.ending_prose = prose; a.ending_kind = kind; }
+  await putSave(fin);
+  return { save: await weft.save(id), ending: { kind, title: terminal.title, prose } };
+}
+
+/** Put the route back on its feet after an ending, without losing the history. */
+export async function reopenRoute(id: string): Promise<ClientSave> {
+  const s = await need(id);
+  const arc = activeArc(s);
+  if (!arc) return weft.save(id);
+  arc.state = "running";
+  delete arc.ending_kind;
+  delete arc.ending_prose;
+  delete arc.ended_turn;
+  await putSave(s);
+  return weft.save(id);
+}
+
+/** The save's heat settings, changeable mid-game — the explicitness dial in
+ *  particular is one people move once they have seen the register in practice. */
+export async function editHeat(
+  id: string, patch: Partial<DatingLayer["heat"]>,
+): Promise<ClientSave> {
+  const s = await need(id);
+  if (!isDating(s)) return weft.save(id);
+  Object.assign(s.dating.heat, patch);
+  await putSave(s);
+  return weft.save(id);
+}

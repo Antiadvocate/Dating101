@@ -25,7 +25,9 @@ import type { Arc, Beat, Door, Terminal } from "./types";
 import { activeArc, currentBeat } from "./types";
 import { heatOf, edgeToPlayer, OUTCOME_WORD } from "./arc";
 import { readOf } from "./read";
-import { NO_TROPES } from "./tics";
+import { NO_TROPES, NO_PURPLE } from "./tics";
+import { appetiteBlock, EXPLICITNESS, HARD_FLOOR, rungLabel } from "./appetite";
+import type { DatingLayer } from "./types";
 
 function safeJson<T>(text: string, fallback: T): T {
   for (const attempt of [extractJson(text), repairJson(extractJson(text))]) {
@@ -58,6 +60,19 @@ function standing(s: SaveState, arc: Arc): string {
     e?.roles?.length ? `Standing relationship: ${e.roles.join(", ")}` : "",
     e?.notes ? `Last thing noted between them: ${e.notes}` : "",
     `They talk like this: ${c?.speech_pattern ?? ""}`,
+    `How far it has physically gone: ${rungLabel(arc.rung ?? 0)}.`,
+  ].filter(Boolean).join("\n");
+}
+
+/** Pasted at the end of every prompt this module sends. The floor plus whatever
+ *  the player put on the save's never list — stated on each call rather than
+ *  once at world creation, because a constraint set at turn zero is a
+ *  constraint the model stopped seeing around turn forty. */
+function bounds(layer: DatingLayer | undefined): string {
+  const lim = layer?.heat?.limits ?? [];
+  return [
+    lim.length ? `THIS STORY NEVER CONTAINS: ${lim.join("; ")}.` : "",
+    HARD_FLOOR,
   ].filter(Boolean).join("\n");
 }
 
@@ -90,6 +105,8 @@ export async function openingFor(s: SaveState, model: string): Promise<{ opening
     prior?.outcome ? `And it went like this: ${OUTCOME_WORD[prior.outcome]}.` : "",
     ``,
     `RECENTLY:\n${recent(s, 1)}`,
+    ``,
+    bounds((s as { dating?: DatingLayer }).dating),
   ].filter(Boolean).join("\n");
 
   try {
@@ -113,17 +130,57 @@ Answer only whether the job has been DISCHARGED: the thing described has actuall
 
 Be strict. The default answer is no. A scene that is heading toward the job is not the job.
 
-Output ONE strict JSON object: {"done":true|false,"because":"under fifteen words"}`;
+YOU ARE ALSO READING ONE OTHER THING off the same text, and it is a question of fact rather than judgement: how far the two people have physically gone, counting ONLY what the text shows or plainly states has already happened. Wanting to is not doing. Nearly is not.
 
-export async function judgeBeat(s: SaveState, model: string): Promise<boolean> {
+  0  nobody has touched anybody with intent
+  1  charged proximity — standing too close, a look held, nothing done
+  2  a first deliberate touch or kiss, acknowledged by both
+  3  hands and mouths, still dressed
+  4  undressed, everything short of sex
+  5  they have slept together
+  6  established and unembarrassed, nothing left to cross
+
+Report the HIGHEST rung the text actually shows. If the text shows nothing physical at all, report the rung you were told they were already at — this reads a scene, it does not reset a history.
+
+ALSO report anything the text revealed about what either of them WANTS — an appetite named out loud, a limit stated, a preference either of them showed rather than said. Quote or paraphrase in a few words each, and return an empty list on the common turn where nothing was revealed. Do not infer; somebody enjoying something is not the same as it being named.
+
+Output ONE strict JSON object: {"done":true|false,"because":"under fifteen words","rung":0,"revealed":["short phrases, usually empty"]}`;
+
+export interface Judgement {
+  done: boolean;
+  /** The rung the page actually shows, never lower than where the route already
+   *  was — this call reads a scene, it does not rewrite a history. */
+  rung: number;
+  /** Appetites or limits the scene put on the record. Folded into the
+   *  character's `discovered` list, which is what the dossier shows. */
+  revealed: string[];
+}
+
+export async function judgeBeat(s: SaveState, model: string): Promise<Judgement> {
   const arc = activeArc(s);
   const beat = currentBeat(arc);
-  if (!arc || !beat) return false;
-  const volatile = `THE JOB: ${beat.job}\n\nTHE SCENE SO FAR:\n${recent(s, 2)}`;
+  const was = arc?.rung ?? 0;
+  if (!arc || !beat) return { done: false, rung: was, revealed: [] };
+  const volatile = [
+    `THE JOB: ${beat.job}`,
+    `WHERE THEY WERE ALREADY AT, physically: rung ${was} (${rungLabel(was)}).`,
+    ``,
+    `THE SCENE SO FAR:\n${recent(s, 2)}`,
+  ].join("\n");
   try {
-    const out = await complete(buildMessages(JUDGE_SYSTEM, "JUDGE", volatile, model), model, model, true, 200);
-    return safeJson<{ done?: boolean }>(out.text, {}).done === true;
-  } catch { return false; }
+    const out = await complete(buildMessages(JUDGE_SYSTEM, "JUDGE", volatile, model), model, model, true, 320);
+    const j = safeJson<{ done?: boolean; rung?: unknown; revealed?: unknown }>(out.text, {});
+    const read = Math.round(Number(j.rung));
+    return {
+      done: j.done === true,
+      // Never below where it already was, and never more than one rung above:
+      // the ladder is the one thing standing between "she is interested" and a
+      // chapter that skips four steps because the model felt the mood was right.
+      rung: Math.max(was, Math.min(was + 1, Number.isFinite(read) ? Math.max(0, Math.min(6, read)) : was)),
+      revealed: (Array.isArray(j.revealed) ? j.revealed : [])
+        .map((x) => String(x ?? "").trim()).filter(Boolean).slice(0, 4),
+    };
+  } catch { return { done: false, rung: was, revealed: [] }; }
 }
 
 /* ── 3. THE DOORS ────────────────────────────────────────────────────────────
@@ -172,6 +229,8 @@ export async function doorsFor(s: SaveState, model: string, because: "discharged
     next ? `\nWHAT IS COMING (do not name it, do not hint at it — it is only here so the doors do not contradict it): ${next.job}` : `\nTHIS IS THE LAST SCENE. The doors are the last thing the player does.`,
     ``,
     `THE SCENE:\n${recent(s, 2)}`,
+    ``,
+    bounds((s as { dating?: DatingLayer }).dating),
   ].join("\n");
 
   let doors: Door[] = [];
@@ -215,6 +274,8 @@ Honour the ending you were given. If it is the bad one, let it be bad — no las
 
 ${NO_TROPES}
 
+${NO_PURPLE}
+
 Do not state anyone's interior. Do not end on an aphorism. Do not name the ending.
 
 Output plain prose. No JSON, no headings, no title.`;
@@ -234,6 +295,8 @@ export async function endingFor(s: SaveState, arc: Arc, terminal: Terminal, mode
     `HOW IT WENT, CHAPTER BY CHAPTER:\n${played}`,
     ``,
     `THE LAST OF IT:\n${recent(s, 2)}`,
+    ``,
+    bounds((s as { dating?: DatingLayer }).dating),
   ].join("\n");
 
   try {
@@ -254,8 +317,9 @@ export async function endingFor(s: SaveState, arc: Arc, terminal: Terminal, mode
  *  will make them confess it in the first paragraph, and the player will have
  *  watched rather than played. It gets the situation and the register, and the
  *  job stays with the judge. */
-export function beatDirective(s: SaveState, arc: Arc, beat: Beat, register: string): string {
+export function beatDirective(s: SaveState, arc: Arc, beat: Beat, layer: DatingLayer): string {
   const other = arc.name;
+  const register = layer.register;
   return [
     `THIS IS A ROMANCE, AND ${other.toUpperCase()} IS ITS SUBJECT. The story is what happens between the player and ${other}. Keep ${other} in the scene and keep the scene between them; the rest of the world is texture unless the player reaches for it.`,
     register ? `REGISTER: ${register}.` : "",
@@ -266,5 +330,13 @@ export function beatDirective(s: SaveState, arc: Arc, beat: Beat, register: stri
     `Do not narrate what anybody feels, decides, or realises. The camera is in the room; it does not have access to anyone's interior. Write what is done and what is said.`,
     `Never write a line that states a general truth about people, love, or life. Never have anybody describe the conversation they are currently in.`,
     `Move something every turn — a change of position, an arrival, a thing picked up or put down, a subject somebody refuses. Two people talking in fixed positions for three turns is a failure.`,
+    ``,
+    NO_PURPLE,
+    ``,
+    appetiteBlock(other, layer.appetites?.[arc.char_id], {
+      rung: arc.rung ?? 0,
+      explicitness: layer.heat?.explicitness ?? "frank",
+      limits: layer.heat?.limits ?? [],
+    }),
   ].filter(Boolean).join("\n");
 }

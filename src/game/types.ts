@@ -1,5 +1,6 @@
 import type { SaveState } from "@weft/engine/types";
 import type { ClientSave } from "@weft/lib/api";
+import type { Appetites, Explicitness } from "./appetite";
 
 /** The four route palettes, in casting order. A love interest owns one for the
  *  life of the save and the whole interface wears it while you are with them. */
@@ -105,6 +106,11 @@ export interface Arc {
   terminals: Terminal[];
   cursor: number;
   state: "running" | "won" | "lost" | "soured";
+  /** HOW FAR THINGS HAVE ACTUALLY GONE, 0-6 on the ladder in game/appetite.ts.
+   *  Measured off the page by the gate judge rather than inferred from
+   *  attraction, because attraction reads to a model as permission and this has
+   *  to read as history. Moves at most one rung per chapter. */
+  rung?: number;
   ended_turn?: number;
   /** The ending as it was actually written. */
   ending_prose?: string;
@@ -168,6 +174,19 @@ export interface DatingLayer {
   /** The genre line, kept separately from world_bible.tone so the casting screen
    *  can show it back verbatim. */
   register: string;
+  /** WHAT KIND OF GAME THIS IS. Set once at casting, editable in the studio.
+   *  `palette` seeds the cast's appetites and is not a promise — a person built
+   *  under it still gets their own limits. `limits` is the player's own never
+   *  list and is pasted into every generation call this layer makes. */
+  heat: {
+    explicitness: Explicitness;
+    palette: string[];
+    limits: string[];
+  };
+  /** What each character actually wants, keyed by char_id. Kept here rather than
+   *  on Weft's Identity so nothing in vendor/ has to change and a subtree pull
+   *  never conflicts. */
+  appetites: Record<string, Appetites>;
   /** Turns the player has spent at a gate without choosing. Cosmetic. */
   seen_prologue?: boolean;
 }

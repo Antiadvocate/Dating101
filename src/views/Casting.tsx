@@ -6,6 +6,7 @@ import type { ClientSave } from "@weft/lib/api";
 import { cast } from "../game/api";
 import type { Brief, CastingInput } from "../game/casting";
 import { ACCENT_HEX, ACCENT_NAMES, ROUTE_ACCENTS } from "../game/types";
+import { EXPLICITNESS, KINK_GROUPS, type Explicitness } from "../game/appetite";
 import { Field, Mark } from "../ui/kit";
 
 /**
@@ -20,8 +21,8 @@ import { Field, Mark } from "../ui/kit";
  * screen is arranged to get the longer answer.
  */
 
-type Step = "you" | "them" | "register" | "shape";
-const ORDER: Step[] = ["you", "them", "register", "shape"];
+type Step = "you" | "them" | "register" | "heat" | "shape";
+const ORDER: Step[] = ["you", "them", "register", "heat", "shape"];
 
 const REGISTERS = [
   "contemporary, adult, plainly written — nothing is softened",
@@ -51,6 +52,10 @@ export default function Casting({ onBack, onCast }: {
   const [register, setRegister] = useState("");
   const [setting, setSetting] = useState("");
   const [beats, setBeats] = useState(8);
+  const [explicitness, setExplicitness] = useState<Explicitness>("frank");
+  const [palette, setPalette] = useState<string[]>([]);
+  const [extraKink, setExtraKink] = useState("");
+  const [limits, setLimits] = useState("");
   const [ground, setGround] = useState(false);
   const [model, setModel] = useState(DEFAULT_MODELS.forge_model);
   const [busy, setBusy] = useState(false);
@@ -64,13 +69,20 @@ export default function Casting({ onBack, onCast }: {
     : step === "them" ? filled.length > 0
     : step === "register" ? register.trim().length > 3
     : true;
+  const togglePalette = (tag: string) =>
+    setPalette((p) => p.includes(tag) ? p.filter((x) => x !== tag) : [...p, tag]);
 
   const go = async () => {
     if (busy) return;
     setBusy(true); setError(null);
+    const splitList = (s: string) =>
+      s.split(/[\n,]/).map((x) => x.trim()).filter(Boolean);
     const input: CastingInput = {
       you, your_name: yourName, your_pronouns: pronouns,
       briefs: filled, register, setting, beats, ground, model,
+      explicitness,
+      palette: [...palette, ...splitList(extraKink)],
+      limits: splitList(limits),
     };
     try {
       onCast(await cast(input, setPhase));
@@ -179,6 +191,66 @@ export default function Casting({ onBack, onCast }: {
                       onClick={() => setRegister(r)}>{r}</button>
                   ))}
                 </div>
+              </>
+            )}
+
+            {step === "heat" && (
+              <>
+                <Head over="Fourth" title="How far does it go?" />
+                <p className="ui" style={{ color: "var(--ink-mid)", marginBottom: 26, maxWidth: 470, fontSize: 13.5, lineHeight: 1.6 }}>
+                  This is an adult game and this is where you say what that means. It sets how the
+                  prose handles sex, and it seeds what the four of them are actually like — but it
+                  does not override them. A person built under this palette still gets their own
+                  limits, and a thing nobody in the cast wants simply will not happen.
+                </p>
+
+                <Mark accent>The prose</Mark>
+                <div style={{ display: "grid", gap: 8, marginBottom: 30 }}>
+                  {(Object.keys(EXPLICITNESS) as Explicitness[]).map((k) => (
+                    <button key={k} className="well" onClick={() => setExplicitness(k)}
+                      style={{
+                        padding: "13px 15px", textAlign: "left",
+                        borderColor: explicitness === k ? "var(--accent)" : "var(--rule)",
+                        background: explicitness === k ? "var(--accent-soft)" : "var(--paper-2)",
+                      }}>
+                      <div className="display" style={{ fontSize: 16, marginBottom: 2 }}>{EXPLICITNESS[k].label}</div>
+                      <div className="ui" style={{ color: "var(--ink-lo)", fontSize: 12, lineHeight: 1.5 }}>{EXPLICITNESS[k].note}</div>
+                    </button>
+                  ))}
+                </div>
+
+                <Mark accent>What it is about</Mark>
+                <p className="ui" style={{ color: "var(--ink-lo)", fontSize: 12, lineHeight: 1.6, marginBottom: 16, maxWidth: 450 }}>
+                  Pick anything. The forge turns each tag into that particular person's version of
+                  it, which is the only interesting form of any of this — "restraint" becomes a
+                  reason a specific woman wants her hands out of the way. Leave it all blank and
+                  everyone's appetites come from their own history instead.
+                </p>
+                {KINK_GROUPS.map((g) => (
+                  <div key={g.group} style={{ marginBottom: 18 }}>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 7 }}>
+                      <span className="label">{g.group}</span>
+                      <span className="ui" style={{ fontSize: 11.5, color: "var(--ink-faint)" }}>{g.note}</span>
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                      {g.tags.map((tag) => (
+                        <button key={tag} className="chip" data-on={palette.includes(tag) ? "true" : "false"}
+                          style={{ textTransform: "none", letterSpacing: 0, fontWeight: 400, fontSize: 11.5 }}
+                          onClick={() => togglePalette(tag)}>{tag}</button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                <div style={{ marginTop: 6 }}>
+                  <Field label="Anything not on the list" value={extraKink} onChange={setExtraKink}
+                    placeholder="comma separated"
+                    hint={palette.length ? `${palette.length} picked.` : "Nothing picked — that is a valid answer."} />
+                </div>
+
+                <Mark>Never</Mark>
+                <Field label="Things this story will not contain" rows={3} value={limits} onChange={setLimits}
+                  placeholder="one per line, or comma separated"
+                  hint="Held on every single call the game makes, not just at world creation. Separately and always: every character is an adult, and there is no setting for that." />
               </>
             )}
 

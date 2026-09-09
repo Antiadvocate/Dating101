@@ -42,6 +42,30 @@ export const NO_TROPES = `FORBIDDEN, in narration (a character may still SAY any
 
 WRITE INSTEAD: what is done, what is said, what is in the room, what somebody is holding, what they do with their hands while they are not talking, what they get wrong, what they decline to answer. Specific, plain, and uninterested in being beautiful.`;
 
+/**
+ * The same job for the sex, and it is a harder one, because the failure mode of
+ * generated erotica is not that it is too explicit — it is that it goes
+ * ABSTRACT at precisely the moment it should get specific. The prose is fine
+ * until clothes come off and then every noun turns into a euphemism, every verb
+ * turns into weather, and two particular people become anybody.
+ *
+ * The rule is that a sex scene is written like everything else in the story:
+ * concretely, in ordinary words, about these two people in this room. If the
+ * narration would not describe a meal as "waves of sustenance crashing over
+ * her", it does not get to describe this that way either.
+ */
+export const NO_PURPLE = `WRITING SEX. It is written exactly like the rest of the prose: plain nouns, plain verbs, specific to these two people, in this room, tonight. The failure to avoid is not being too explicit — it is going vague at the moment it matters.
+
+FORBIDDEN, in narration:
+- Euphemism for anatomy. No core, heat, sex, womanhood, manhood, length, member, entrance, folds, bud, petals, flower, velvet, or any word chosen to avoid the ordinary one. Use the ordinary one, or describe what is being done without naming the part.
+- Weather and physics as feeling: waves, jolts, shocks, sparks, electricity, currents, fire, being consumed, shattering, coming undone, unravelling, falling apart, seeing stars, the world narrowing.
+- Superlatives with nothing under them: more than she could take, better than anything, never felt like this, beyond anything.
+- The body as a separate agent: her body betrayed her, responded of its own accord, could not help itself. People do things. Bodies do not overrule them.
+- Blunt-force verbs used as intensity: pounded, slammed, impaled, buried himself, filled her completely.
+- Stating what anyone feels. Same rule as everywhere else in this story: the camera is in the room.
+
+WRITE INSTEAD: who is doing what, in what order, what they say, what they get wrong, what is awkward, what they have to move, what one of them stops to do, what the room sounds like. Two people who have done this before are different from two who have not, and both are different from these two. Somebody laughs. Somebody's arm goes dead. That is the material.`;
+
 export interface Tic {
   family: string;
   /** The offending phrase, verbatim, for quoting back. */
@@ -126,6 +150,52 @@ const FAMILIES: { family: string; patterns: RegExp[] }[] = [
     ],
   },
   {
+    family: "euphemism for the body",
+    patterns: [
+      /\b(?:h(?:er|is|their))\s+(?:core|heat|sex|centre|center|entrance|folds|bud|nub|mound|petals|flower|velvet|womanhood|manhood|maidenhood)\b/i,
+      /\bh(?:er|is|their)\s+(?:length|member|shaft|arousal|need|desire)\s+(?:against|into|inside|pressed|throbb\w*|strain\w*)/i,
+      /\b(?:velvet|silken|molten|honeyed)\s+(?:heat|walls|warmth|skin|core)\b/i,
+      /\bthe\s+(?:apex|juncture)\s+of\s+h(?:er|is|their)\s+thighs\b/i,
+    ],
+  },
+  {
+    family: "weather instead of sensation",
+    patterns: [
+      /\bwaves?\s+of\s+(?:pleasure|sensation|heat|need|desire|want)\b/i,
+      /\b(?:pleasure|sensation|heat|desire)\s+(?:crash\w*|wash\w*|flood\w*|surg\w*|rippl\w*|roll\w*)\s+(?:over|through)/i,
+      /\b(?:jolt|shock|spark|current|bolt|shiver)s?\s+(?:of\s+\w+\s+)?(?:shot|ran|raced|shot through|through)\b/i,
+      /\bsent\s+(?:shivers|sparks|heat|fire)\s+(?:through|down|racing)/i,
+      /\bset\s+h(?:er|is|their)\s+(?:skin|blood|body|nerves)\s+(?:on fire|alight|ablaze)/i,
+    ],
+  },
+  {
+    family: "the dissolution",
+    patterns: [
+      /\b(?:came|come|coming)\s+undone\b/i,
+      /\b(?:shatter\w*|unravel\w*|fell apart|falling apart|splinter\w*)\b.{0,24}\b(?:beneath|under|around|against)\s+(?:him|her|them|you)\b/i,
+      /\bsaw\s+stars\b/i,
+      /\bh(?:er|is|their)\s+world\s+(?:narrow\w*|shrank|reduced)\s+to\b/i,
+      /\b(?:exploded|detonated)\s+(?:around|beneath|inside)\b/i,
+    ],
+  },
+  {
+    family: "the body as a separate agent",
+    patterns: [
+      /\bh(?:er|is|their)\s+body\s+(?:betray\w*|respond\w*|answer\w*|arch\w*\s+of its own|had other ideas)/i,
+      /\bof\s+(?:its|their)\s+own\s+accord\b/i,
+      /\b(?:could|couldn'?t)\s+(?:not\s+)?help\s+(?:h(?:er|im|them)self|but)\b/i,
+      /\b(?:she|he|they)\s+found\s+h(?:er|im|them)self\b/i,
+    ],
+  },
+  {
+    family: "force as intensity",
+    patterns: [
+      /\b(?:pound\w*|slamm\w*|impal\w*|ramm\w*)\s+(?:into|onto|against)\s+(?:h(?:er|im|them)|you)\b/i,
+      /\bburi(?:ed|es)\s+h(?:im|er|them)self\s+(?:in|inside)\b/i,
+      /\bfill\w*\s+h(?:er|im|them)\s+(?:completely|entirely|utterly|to the hilt)\b/i,
+    ],
+  },
+  {
     family: "the aphorism",
     patterns: [
       /\bthat'?s\s+(?:what|how)\s+(?:love|people|men|women|grief|wanting)\s+(?:is|does|works)\b/i,
@@ -195,6 +265,9 @@ export function ticCorrection(tics: Tic[]): string {
     `Do not write anything of that kind this turn. Write what is done and said instead. If you cannot find a way to make a moment land without reaching for a body part or a charged silence, then let it not land — an ordinary moment written plainly is worth more than a charged one written like everybody else's.`,
   ].join("\n");
 }
+
+/** Both prohibitions, for the calls where sex may actually reach the page. */
+export const VOICE_CONTRACT = `${NO_TROPES}\n\n${NO_PURPLE}`;
 
 /** For the small gauge in the journal: how clean was this run. */
 export function ticRate(history: { narrator_prose?: string }[], window = 12): number {

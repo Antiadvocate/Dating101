@@ -58,11 +58,27 @@ const SAVE = () => {
     dating: {
       version: 1, active: "char_a", gate: null, needs_opening: false, keepsakes: [],
       register: "contemporary, adult, plainly written",
+      heat: {
+        explicitness: "explicit",
+        palette: ["restraint", "still in work clothes", "risk of being caught", "being told what to do"],
+        limits: ["anything involving her brother"],
+      },
+      appetites: {
+        char_a: {
+          into: ["being told what to do by somebody who has earned it", "her hands out of the way", "being caught at it in her own kitchen"],
+          curious: ["marks that last past a shift"],
+          unsaid: "She wants to be asked to stop running it for one evening, and she will never ask, because asking would mean admitting she is tired.",
+          limits: ["anything she cannot walk out of", "being laughed at", "anybody from work knowing"],
+          register: "Talks the whole way through and gets sharper the closer it gets, which is not a mood, it is a defence. Cannot ask for a single thing directly.",
+          discovered: ["her hands out of the way", "being laughed at"],
+          unsaid_found: false,
+        },
+      },
       routes: {
         char_a: {
           char_id: "char_a", name: "Vesna Orlić", accent: "verd",
           brief: "Runs a kitchen. Forty, divorced.",
-          cursor: 3, state: "running",
+          cursor: 3, state: "running", rung: 2,
           beats: [
             { ...beat(0, "The night the anchovies go missing", "a Tuesday, late", "The Pilot Boat", "done"), outcome: "warm", taken: "Stay until she closes up and walk out with her", heat_in: 30, heat_out: 39 },
             { ...beat(1, "What she is like around her brother", "the following Sunday", "Vesna's flat", "done"), outcome: "cool", taken: "Say nothing about the brother and let it sit", heat_in: 39, heat_out: 35 },
@@ -149,6 +165,12 @@ for (const [tag, w, h] of [["wide", 1280, 860], ["phone", 402, 800]]) {
   await shot(page, `${tag}-5-dossier`, true);
   await page.locator('button[title="studio"]').click();
   await shot(page, `${tag}-6-studio`, true);
+  await page.locator('button[title="console"]').click();
+  await shot(page, `${tag}-9-console`, true);
+  await page.getByText("Open the editor").click();
+  await shot(page, `${tag}-10-editor`, true);
+  await page.getByText("Desire", { exact: true }).click();
+  await shot(page, `${tag}-11-editor-desire`, true);
   await ctx.close();
 }
 
@@ -162,9 +184,25 @@ await page.goto(BASE);
 await shot(page, "wide-0-gate-none");
 await page.getByText("Start casting").click();
 await shot(page, "wide-7-casting-you", true);
-await page.locator('input.field').first().fill("Ash Kovač");
-await page.locator('textarea.field').first().fill("Thirty-four. Moved back in March. I fix espresso machines, which is a real trade and pays like a hobby.");
-await page.getByText("Next").click();
+
+// Step through casting. The waits matter: AnimatePresence keeps the outgoing
+// step mounted for a third of a second, so a bare fill() lands on the step you
+// just left and the Next button never enables.
+const next = async () => {
+  const b = page.locator('button:has-text("Next")');
+  await b.waitFor({ state: "visible" });
+  await page.waitForTimeout(450);
+  await b.click();
+  await page.waitForTimeout(600);
+};
+await page.locator("input.field").first().fill("Ash Kovač");
+await page.locator("textarea.field").first().fill("Thirty-four. Moved back in March. I fix espresso machines, which is a real trade and pays like a hobby.");
+await next();
 await shot(page, "wide-8-casting-them", true);
+await page.locator("textarea.field").first().fill("Runs the kitchen at a place better than it needs to be. Forty, divorced, funny about eighty percent of the time and she does not adjust for the rest.");
+await next();
+await page.locator("textarea.field").first().fill("explicit, unhurried, more interested in people than in acts");
+await next();
+await shot(page, "wide-12-casting-heat", true);
 await ctx.close();
 await b.close();

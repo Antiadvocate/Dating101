@@ -22,6 +22,7 @@ import { DEFAULT_MODELS } from "@weft/engine/types";
 import type { SaveState, Identity } from "@weft/engine/types";
 import { ROUTE_ACCENTS, type AnySave, type Arc, type Beat, type DatingLayer, type Terminal } from "./types";
 import { enterBeat } from "./arc";
+import { appetiteBrief, adultAge, emptyAppetites, EXPLICITNESS, HARD_FLOOR, type Appetites, type Explicitness } from "./appetite";
 
 export interface Brief {
   /** What the player typed. The whole description, verbatim. */
@@ -47,6 +48,12 @@ export interface CastingInput {
   /** Ground the forge with web search — for a real city, a real subculture. */
   ground: boolean;
   model: string;
+  /** How far the prose goes. */
+  explicitness: Explicitness;
+  /** What the game is about — seeds the cast's appetites, promises nothing. */
+  palette: string[];
+  /** The player's own never list. Held on every call this layer makes. */
+  limits: string[];
 }
 
 function safeJson<T>(text: string, fallback: T): T {
@@ -87,6 +94,11 @@ export function buildSeed(i: CastingInput): string {
     ``,
     `RELATIONSHIPS AT THE START: the player is a stranger to every one of the people above. Warmth 0, trust 0, relation_to_player "stranger" or a plain neutral descriptor ("the woman who works the late shift", "her brother's friend, met once"). NOBODY starts fond of the player. Whatever any of them come to feel has to happen in play. This is the single most important instruction in this seed: a cast that begins warm has nothing left to give.`,
     ``,
+    `THIS IS AN ADULT STORY AND ITS SUBJECT IS DESIRE. Written at this level: ${EXPLICITNESS[i.explicitness].label} — ${EXPLICITNESS[i.explicitness].note} Build the world to suit it: the places should include somewhere private, somewhere these people would end up at two in the morning, and somewhere it would be a mistake to be seen. Give at least half the cast drive_goals that are about wanting someone, wanting to be wanted, jealousy, loneliness reaching outward, or an appetite they are not admitting to.`,
+    i.palette.length ? `WHAT THIS GAME IS ABOUT: ${i.palette.join("; ")}. Build people for whom these are live, in their own particular versions — never all four in the same way, and at least one of them indifferent to something on the list.` : ``,
+    i.limits.length ? `THIS STORY NEVER CONTAINS: ${i.limits.join("; ")}.` : ``,
+    HARD_FLOOR,
+    ``,
     `THE STORY IS ABOUT GETTING TO KNOW SOMEBODY. Threads and faction clocks should be the ordinary machinery of these people's lives — a lease running out, a sister who keeps calling, a job that is going badly, an ex who is still around, a band that is falling apart — not a conspiracy and not a crisis aimed at the player. Keep the seeded tension low. The pressure in this story comes from other people's lives colliding with yours, not from threat.`,
   ].join("\n");
 }
@@ -114,6 +126,10 @@ WHERE and WHEN are advisory. WHERE must be one of the place names given to you a
 
 FLOOR and CEILING are how many of the player's turns the beat must last at minimum, and after how many it closes whether or not its job got done. Small beats: floor 3, ceiling 8. Ordinary beats: floor 4, ceiling 11. The two or three big ones: floor 6, ceiling 16. Never a floor above 7 or a ceiling above 18.
 
+PHYSICAL ESCALATION ACROSS THE SPINE. This is an adult story and the body is part of it, but a route where everything happens in chapter two has nowhere to go. Across the beats, physical contact escalates ONE step at a time — proximity, then a first deliberate touch, then clothed heat, then undressed, then sex — and each step is a beat's job in its own right, not a thing that happens in passing during a beat about something else. Put the first genuinely physical beat somewhere in the middle third, never in the first two. At least one late beat should be about what the two of them are like AFTER, which is where a person is least able to perform.
+
+THE APPETITES. Write an "appetites" object for each person as specified in the brief you are given. It describes who they are, not what scenes to run: never write a beat whose job is to deliver an item off their list.
+
 THE THREE ENDINGS, written specifically for THIS person — a guarded person's bad ending is not a reckless person's bad ending:
 - "win": what it looks like when this actually works. Concrete and small. Not a wedding, not a declaration; a scene you could film.
 - "loss": it does not happen, and why it does not, in this person's particular way of not happening.
@@ -122,10 +138,15 @@ THE THREE ENDINGS, written specifically for THIS person — a guarded person's b
 Every route you are given must come back COMPLETELY DIFFERENT from the others: different beat kinds, different pacing, different endings. If two routes could swap a beat without anyone noticing, rewrite one.
 
 SHAPE:
-{"routes":[{"name":"exact name as given","beats":[{"title":"","job":"","where":"","when":"","floor":4,"ceiling":11}],"terminals":[{"kind":"win","title":"","description":""},{"kind":"loss","title":"","description":""},{"kind":"sour","title":"","description":""}]}]}`;
+{"routes":[{"name":"exact name as given","beats":[{"title":"","job":"","where":"","when":"","floor":4,"ceiling":11}],"terminals":[{"kind":"win","title":"","description":""},{"kind":"loss","title":"","description":""},{"kind":"sour","title":"","description":""}],"appetites":{"into":[],"curious":[],"unsaid":"","limits":[],"register":""}}]}`;
+
+interface RawAppetites {
+  into?: unknown; curious?: unknown; unsaid?: unknown; limits?: unknown; register?: unknown;
+}
 
 interface RawRoute {
   name?: string;
+  appetites?: RawAppetites;
   beats?: { title?: string; job?: string; where?: string; when?: string; floor?: number; ceiling?: number }[];
   terminals?: { kind?: string; title?: string; description?: string }[];
 }
@@ -175,6 +196,21 @@ function normalizeTerminals(raw: RawRoute["terminals"], who: string): Terminal[]
   });
 }
 
+const strList = (v: unknown, cap: number): string[] =>
+  (Array.isArray(v) ? v : []).map((x) => String(x ?? "").trim()).filter(Boolean).slice(0, cap);
+
+function normalizeAppetites(raw: RawAppetites | undefined): Appetites {
+  const a = emptyAppetites();
+  a.into = strList(raw?.into, 6);
+  a.curious = strList(raw?.curious, 4);
+  a.limits = strList(raw?.limits, 5);
+  const unsaid = String(raw?.unsaid ?? "").trim();
+  if (unsaid) a.unsaid = unsaid;
+  const reg = String(raw?.register ?? "").trim();
+  if (reg) a.register = reg;
+  return a;
+}
+
 /** Find the character the player described, in the cast the forge built. Exact
  *  name first, then a loose match, then the least-connected NPC as a last
  *  resort — a route pointed at the wrong person is recoverable by hand; a
@@ -217,6 +253,12 @@ export async function runCasting(input: CastingInput, onPhase: CastingProgress =
     input.register.trim() || "contemporary romance, plainly written, adult",
   );
 
+  // THE FLOOR, ENFORCED ON THE RECORD AND NOT ONLY IN THE PROMPT. The forge is
+  // told every character is an adult and generally complies; "generally" is not
+  // a guarantee, and a number on a record is read back into every prompt from
+  // here to the end of the save. Clamp before anything is written.
+  for (const c of Object.values(save.characters)) c.age = adultAge(c.age);
+
   onPhase("writing the arcs");
   const placeNames = Object.values(save.world.places).map((p) => p.name);
 
@@ -246,6 +288,9 @@ export async function runCasting(input: CastingInput, onPhase: CastingProgress =
 
   const volatile = [
     `GENRE AND REGISTER: ${input.register.trim() || "contemporary romance, plainly written, adult"}`,
+    ``,
+    appetiteBrief(input.palette, input.explicitness, input.limits),
+    ``,
     `THE WORLD: ${save.world_bible.name} — ${save.world_bible.political_situation}`,
     `PLACES (use these names verbatim for the where field): ${placeNames.join(" · ")}`,
     `THE PLAYER: ${save.characters["char_player"]?.name}, ${save.characters["char_player"]?.age}. ${save.characters["char_player"]?.background}`,
@@ -266,6 +311,7 @@ export async function runCasting(input: CastingInput, onPhase: CastingProgress =
   }
 
   const routes: Record<string, Arc> = {};
+  const appetites: Record<string, Appetites> = {};
   pairs.forEach(({ brief, char }, n) => {
     const raw = (parsed.routes ?? []).find(
       (r) => String(r?.name ?? "").trim().toLowerCase() === char.name.trim().toLowerCase(),
@@ -273,8 +319,10 @@ export async function runCasting(input: CastingInput, onPhase: CastingProgress =
     let beats = normalizeBeats(raw?.beats, input.beats, placeNames);
     if (beats.length < 3) beats = fallbackBeats(char.name, input.beats, placeNames);
     beats.forEach((b, i) => { b.idx = i; });
+    appetites[char.character_id] = normalizeAppetites(raw?.appetites);
     routes[char.character_id] = {
       char_id: char.character_id,
+      rung: 0,
       name: char.name,
       accent: ROUTE_ACCENTS[n % ROUTE_ACCENTS.length],
       brief: brief.text.trim(),
@@ -293,6 +341,12 @@ export async function runCasting(input: CastingInput, onPhase: CastingProgress =
     needs_opening: false,
     keepsakes: [],
     register: input.register.trim(),
+    heat: {
+      explicitness: input.explicitness,
+      palette: [...input.palette],
+      limits: [...input.limits],
+    },
+    appetites,
   };
   (save as ClientSave & { dating: DatingLayer }).dating = dating;
   return save;

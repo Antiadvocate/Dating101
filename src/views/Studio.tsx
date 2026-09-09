@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { getApiKey, setApiKey } from "@weft/config";
 import { DEFAULT_MODELS } from "@weft/engine/types";
-import { settings as saveSettings, editSave, load } from "../game/api";
+import { settings as saveSettings, editSave, editHeat, load } from "../game/api";
 import { type Save } from "../game/types";
+import { EXPLICITNESS, type Explicitness } from "../game/appetite";
 import { Field, Mark } from "../ui/kit";
 import { ticRate } from "../game/tics";
 
@@ -37,6 +38,8 @@ export default function Studio({ save, setSave, onClose }: {
   const [art, setArt] = useState(save?.world_bible.art_direction ?? STYLES[0]);
   const [auto, setAuto] = useState(!!m.auto_illustrate);
   const [night, setNight] = useState(() => document.documentElement.getAttribute("data-mode") === "night");
+  const [expl, setExpl] = useState<Explicitness>(save?.dating.heat.explicitness ?? "frank");
+  const [limits, setLimits] = useState((save?.dating.heat.limits ?? []).join("\n"));
 
   useEffect(() => {
     document.documentElement.setAttribute("data-mode", night ? "night" : "day");
@@ -54,6 +57,10 @@ export default function Studio({ save, setSave, onClose }: {
         auto_illustrate: auto,
       });
       await editSave(save.id, { world_bible: { art_direction: art.trim() } });
+      await editHeat(save.id, {
+        explicitness: expl,
+        limits: limits.split(/[\n,]/).map((x) => x.trim()).filter(Boolean),
+      });
       setSave(await load(save.id) as Save);
     }
     setSaved(true);
@@ -98,6 +105,38 @@ export default function Studio({ save, setSave, onClose }: {
           A picture a message, arriving after the prose has committed so nothing waits on it. On the
           cloud path that is a few cents a turn, which is why it is off.
         </div>
+
+        {save && (
+          <div style={{ marginTop: 30 }}>
+            <Mark accent>How far it goes</Mark>
+            <div className="ui" style={{ fontSize: 11.5, color: "var(--ink-faint)", marginBottom: 14, lineHeight: 1.55 }}>
+              Changeable mid-game — this is the one most people move once they have seen the register
+              in practice. It changes the prose from the next turn on; nothing already written is
+              rewritten.
+            </div>
+            <div style={{ display: "grid", gap: 7, marginBottom: 22 }}>
+              {(Object.keys(EXPLICITNESS) as Explicitness[]).map((k) => (
+                <button key={k} className="well" onClick={() => setExpl(k)}
+                  style={{
+                    padding: "11px 14px", textAlign: "left",
+                    borderColor: expl === k ? "var(--accent)" : "var(--rule)",
+                    background: expl === k ? "var(--accent-soft)" : "var(--paper-2)",
+                  }}>
+                  <div className="display" style={{ fontSize: 15.5 }}>{EXPLICITNESS[k].label}</div>
+                  <div className="ui" style={{ color: "var(--ink-lo)", fontSize: 11.5, lineHeight: 1.5 }}>{EXPLICITNESS[k].note}</div>
+                </button>
+              ))}
+            </div>
+            <Field label="Never — one per line" rows={3} value={limits} onChange={setLimits}
+              hint="Pasted into every call this game makes, not stated once at the start. Separately and always: every character is an adult, and there is no setting for that." />
+            {!!save.dating.heat.palette.length && (
+              <div className="ui" style={{ fontSize: 11.5, color: "var(--ink-faint)", marginTop: -14, marginBottom: 26, lineHeight: 1.6 }}>
+                Palette set at casting: {save.dating.heat.palette.join(" · ")}. It seeded the cast and
+                has done its job — change what anyone actually wants in their own editor.
+              </div>
+            )}
+          </div>
+        )}
 
         <div style={{ marginTop: 30 }}>
           <Mark>The page</Mark>

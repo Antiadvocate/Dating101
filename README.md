@@ -76,6 +76,81 @@ It is a printed keepsake, not a visual novel and not a dashboard.
   three endings sit at the bottom from the beginning. Knowing the two ways it can
   go wrong is most of what makes the middle tense.
 
+## Appetites
+
+It is an adult game, so desire is a system rather than a setting.
+
+A checklist at casting would produce a vending machine: every character wants
+everything on it, nobody refuses anything, and by chapter four the four routes
+differ only by name. So appetites are per-person and have four parts, and the two
+that matter are the ones a checklist does not have.
+
+- **into** — what they want and would say so.
+- **curious** — what they have not done and would try, with someone they trusted.
+- **unsaid** — one thing they want and will not ask for. This is the game. It is
+  not in the dossier when you meet them; the narrator is never told what it is;
+  it surfaces only if play produces the conditions in which somebody would risk
+  saying a thing like that. Finding it is worth more than anything on the `into`
+  list, because anyone can read that list.
+- **limits** — what they will not do, ever.
+
+**Limits are not a safety feature, they are the drama.** A person who will do
+anything is not a person and is not interesting to pursue — there is nothing to
+find out and nothing to be trusted with. The forge is told to write at least one
+limit that sits directly beside something on the same person's `into` list, so it
+is a line rather than a fence around empty ground. A limit is hard: they refuse,
+plainly, and Weft records refusal as a first-class stance, so it has consequences
+the simulation actually carries.
+
+The dossier shows only what you have **discovered**. The truth is on the card from
+turn one and the game hands it over a line at a time, matched loosely off what
+each scene revealed. The console has a "read the answers" button for anyone who
+would rather just look; it is one-way and says so.
+
+**The ladder.** Generated erotica teleports — give a model two people with high
+recorded attraction and it will write them in bed in chapter two, because nothing
+told it what has and has not already happened and the attraction number reads as
+permission. So how far things have physically gone is tracked as a rung from 0 to
+6, read off the page by the gate judge (which was already being called, so it
+costs nothing) and allowed to move at most one rung per chapter. It is the only
+thing standing between "she is interested" and a scene that skips four steps.
+
+**Explicitness** is a save-level dial — charged, frank, or explicit — changeable
+mid-game from the studio. Weft's own narrator prompt already says to scale heat
+to the story's level and its recap pass is told never to sanitize, so this is a
+lever the engine was built to read.
+
+**Two floors.** Your own never-list is pasted into every generation call this
+layer makes, not stated once at world creation — a constraint set at turn zero is
+one the model stopped seeing around turn forty. And separately: every character
+is an adult, asserted on every call, validated in casting and in the editor, with
+no setting for it and no way to edit it out from inside the game.
+
+## Editing and the console
+
+Everything about a person is editable — name, age, looks, history, traits, voice,
+taste, appetites, limits, and the three numbers the whole game is played for. This
+is not a debug affordance. The forge writes a first draft out of a paragraph you
+typed and it will get things wrong; whether you can reach in and fix the voice on
+turn three, instead of rerolling the whole town, is the difference between a game
+you play once and one you keep.
+
+Two fields carry warnings because they are load-bearing in non-obvious ways. **Age**
+is stored a dozen times — as a number, and as prose in backgrounds, memories, edge
+notes and canon — and a sentence beats a field every time, so edits run through
+Weft's reconciliation pass, which reports what it changed and what it left alone.
+**Voice** is rewritten by three separate automatic passes that are useful on a
+character the engine wrote and vandalism on one you wrote; there is a lock.
+
+The console (the sliders mark) is cheats in the ordinary sense: force or reroll a
+gate, rewrite a chapter opening, jump to any chapter, set the ladder, set warmth
+and wanting and trust directly, reveal a card, force any of the three endings,
+reopen a finished route, god mode, set the clock, roll back, and raw JSON for the
+world. Nothing is withheld — the state is already yours, sitting in IndexedDB,
+and making you open devtools instead of pressing a button does not protect
+anything. Every control says what it costs before you press it; several are
+one-way and say so.
+
 ## The tics
 
 Generated romance fails in a specific, boring way: when a model has nothing to
@@ -83,6 +158,14 @@ write it reaches for the body. A breath catches, a pulse quickens, something
 unreadable crosses a face, a flush climbs a neck. None of those sentences carry
 information, and once one appears the next three arrive within the paragraph
 because the model is now imitating itself.
+
+There is a second half for sex specifically, and the failure there is not that
+it is too explicit — it is that the prose goes **abstract** at exactly the moment
+it should get specific. Everything is fine until clothes come off and then every
+noun becomes a euphemism, every verb becomes weather, and two particular people
+become anybody. Caught families: euphemism for the body, weather instead of
+sensation, the dissolution (coming undone, shattering, seeing stars), the body as
+a separate agent, and force used as intensity.
 
 `src/game/tics.ts` carries a prompt fragment that forbids the whole family in
 every generation call, and a detector that reads what actually came back and
@@ -103,7 +186,16 @@ npm run build    # dist/ — the static bundle Pages serves
 Paste an OpenRouter key when it asks. It is stored in that browser and sent to
 openrouter.ai and nowhere else. Saves live in IndexedDB on the device.
 
-Push to `main` and the included workflow builds and publishes to GitHub Pages.
+### Publishing
+
+Pushes to `main` build and publish to GitHub Pages automatically. To publish a
+branch that is not main — a work-in-progress, before merging — go to **Actions →
+Deploy to Pages → Run workflow** and pick the branch; the workflow file has to
+exist on that branch, which it does.
+
+Pages needs **Settings → Pages → Build and deployment → Source → GitHub Actions**
+set once. `base: "./"` in the Vite config means the bundle works from a user root
+or a project subpath with no per-repo configuration.
 
 ## Keeping Weft up to date
 
@@ -128,10 +220,12 @@ src/game/     the dating layer
   read.ts       state → a sentence about her behaviour. Zero tokens.
   casting.ts    the forge seed and the spine call
   gate.ts       chapter openings, the discharge judge, the doors, the ending
-  tics.ts       the romance tic detector and the prohibition
+  appetite.ts   what people want, what they will not do, the ladder, the floor
+  tics.ts       the romance and erotica tic detectors, and the prohibitions
   api.ts        the glue over Weft's api
 src/ui/       Photo, Prose, the kit
 src/views/    Shelf · Casting · Scene · Spine · Dossier · Keepsakes · Studio
+              Editor (every field on a person) · Debug (the console)
 vendor/weft/  the engine, untouched
 ```
 

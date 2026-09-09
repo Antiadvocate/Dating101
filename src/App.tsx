@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { GitBranch, Images, Settings2, User, BookOpen } from "lucide-react";
+import { GitBranch, Images, Settings2, SlidersHorizontal, User, BookOpen } from "lucide-react";
 import { hasApiKey, setApiKey } from "@weft/config";
 import { load } from "./game/api";
 import { activeArc, type Save } from "./game/types";
@@ -11,10 +11,12 @@ import Spine from "./views/Spine";
 import Dossier from "./views/Dossier";
 import Keepsakes from "./views/Keepsakes";
 import Studio from "./views/Studio";
+import Editor from "./views/Editor";
+import Debug from "./views/Debug";
 import { IconMark } from "./ui/kit";
 
 type Mode = "shelf" | "casting" | "game";
-type Tab = "scene" | "spine" | "her" | "album" | "studio";
+type Tab = "scene" | "spine" | "her" | "album" | "studio" | "console" | "editor";
 
 /**
  * THE SHELL.
@@ -35,6 +37,8 @@ export default function App() {
   const [mode, setMode] = useState<Mode>("shelf");
   const [tab, setTab] = useState<Tab>("scene");
   const [save, setSave] = useState<Save | null>(null);
+  /** Who the editor is open on. */
+  const [editing, setEditing] = useState<string | null>(null);
   const [needKey, setNeedKey] = useState(!hasApiKey());
   const [keyDraft, setKeyDraft] = useState("");
 
@@ -103,6 +107,10 @@ export default function App() {
             <IconMark title="keepsakes" on={tab === "album"} onClick={() => setTab(tab === "album" ? "scene" : "album")}>
               <Images size={15} />
             </IconMark>
+            <IconMark title="console" on={tab === "console" || tab === "editor"}
+              onClick={() => setTab(tab === "console" ? "scene" : "console")}>
+              <SlidersHorizontal size={15} />
+            </IconMark>
             <IconMark title="studio" on={tab === "studio"} onClick={() => setTab(tab === "studio" ? "scene" : "studio")}>
               <Settings2 size={15} />
             </IconMark>
@@ -130,7 +138,19 @@ export default function App() {
                 {(tab === "spine" || (tab === "scene" && !arc)) && (
                   <Spine save={save} setSave={setSave} onPlay={() => setTab("scene")} />
                 )}
-                {tab === "her" && <Dossier save={save} setSave={setSave} />}
+                {tab === "her" && (
+                  <Dossier save={save} setSave={setSave}
+                    onEdit={(cid) => { setEditing(cid); setTab("editor"); }} />
+                )}
+                {tab === "console" && (
+                  <Debug save={save} setSave={setSave}
+                    onEdit={(cid) => { setEditing(cid); setTab("editor"); }}
+                    onPlay={() => setTab("scene")} />
+                )}
+                {tab === "editor" && editing && (
+                  <Editor save={save} setSave={setSave} charId={editing}
+                    onBack={() => setTab("console")} />
+                )}
                 {tab === "album" && <Keepsakes save={save} />}
                 {tab === "studio" && <Studio save={save} setSave={setSave} onClose={() => setTab("scene")} />}
               </>

@@ -1,7 +1,8 @@
 import React, { useState } from "react";
-import { Camera } from "lucide-react";
+import { Camera, PencilLine } from "lucide-react";
 import { activeArc, type Save } from "../game/types";
 import { coldRead, readOf } from "../game/read";
+import { known, rungLabel, emptyAppetites } from "../game/appetite";
 import { portrait, load } from "../game/api";
 import { Lightbox, Mark, Photo } from "../ui/kit";
 
@@ -25,7 +26,9 @@ import { Lightbox, Mark, Photo } from "../ui/kit";
  * an experience they did not ask to have protected is not a decision this app
  * gets to make.
  */
-export default function Dossier({ save, setSave }: { save: Save; setSave: (s: Save) => void }) {
+export default function Dossier({ save, setSave, onEdit }: {
+  save: Save; setSave: (s: Save) => void; onEdit: (charId: string) => void;
+}) {
   const arc = activeArc(save);
   const [cold, setCold] = useState(false);
   const [drawing, setDrawing] = useState(false);
@@ -38,6 +41,8 @@ export default function Dossier({ save, setSave }: { save: Save; setSave: (s: Sa
   const traits = save.traits[arc.char_id] ?? [];
   const read = readOf(save, arc.char_id);
   const mind = save.minds?.[arc.char_id]?.about.find((b) => b.target === "char_player");
+  const appetites = save.dating.appetites[arc.char_id] ?? emptyAppetites();
+  const found = known(appetites);
   const facts = (save.memory["char_player"]?.facts ?? []).filter((f) => !f.superseded_by);
 
   const draw = async () => {
@@ -54,10 +59,15 @@ export default function Dossier({ save, setSave }: { save: Save; setSave: (s: Sa
           <div style={{ width: 210, flex: "none" }}>
             <Photo src={her?.portrait_url} ratio="4 / 5" tilt="l" priority
               onClick={her?.portrait_url ? () => setLightbox(her.portrait_url!) : undefined} />
-            <button className="chip" style={{ marginTop: 10 }} onClick={draw} disabled={drawing}>
-              <Camera size={11} style={{ verticalAlign: -1, marginRight: 5 }} />
-              {drawing ? "drawing…" : her?.portrait_url ? "another take" : "draw her"}
-            </button>
+            <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
+              <button className="chip" onClick={draw} disabled={drawing}>
+                <Camera size={11} style={{ verticalAlign: -1, marginRight: 5 }} />
+                {drawing ? "drawing…" : her?.portrait_url ? "another take" : "draw her"}
+              </button>
+              <button className="chip" onClick={() => onEdit(arc.char_id)}>
+                <PencilLine size={11} style={{ verticalAlign: -1, marginRight: 5 }} /> edit
+              </button>
+            </div>
           </div>
           <div style={{ flex: "1 1 260px", minWidth: 240 }}>
             <h1 className="display" style={{ fontSize: 38, lineHeight: 1.05, marginBottom: 6 }}>{her?.name}</h1>
@@ -94,6 +104,41 @@ export default function Dossier({ save, setSave }: { save: Save; setSave: (s: Sa
               <div className="ui" style={{ fontSize: 13, lineHeight: 1.55, color: "var(--ink-mid)" }}>
                 {cond.conditions.join(", ")}{cond.fatigue !== "fresh" ? `, ${cond.fatigue}` : ""}
               </div>
+            </div>
+          )}
+        </div>
+
+        {/* WHAT YOU HAVE FOUND OUT. The truth of a person is on their card from
+            turn one; this shows only the part play has actually surfaced, which
+            is what makes finding the rest worth anything. Everything is visible
+            in the editor for anyone who would rather just read it. */}
+        <Mark accent>What you have found out</Mark>
+        <div style={{ marginBottom: 34 }}>
+          <div className="ui" style={{ fontSize: 12.5, color: "var(--ink-mid)", marginBottom: 14, lineHeight: 1.6 }}>
+            Where it has actually got to: <strong style={{ color: "var(--ink)" }}>{rungLabel(arc.rung ?? 0)}</strong>.
+          </div>
+          {found.into.length > 0 && (
+            <div style={{ marginBottom: 14 }}>
+              <div className="label" style={{ marginBottom: 5 }}>She wants</div>
+              <div className="prose" style={{ fontSize: 14.5, lineHeight: 1.55 }}>{found.into.join(" · ")}</div>
+            </div>
+          )}
+          {found.limits.length > 0 && (
+            <div style={{ marginBottom: 14 }}>
+              <div className="label" style={{ marginBottom: 5 }}>She will not</div>
+              <div className="prose" style={{ fontSize: 14.5, lineHeight: 1.55 }}>{found.limits.join(" · ")}</div>
+            </div>
+          )}
+          {found.unsaid && (
+            <div style={{ paddingLeft: 13, borderLeft: "2px solid var(--accent)" }}>
+              <div className="label label-accent" style={{ marginBottom: 5 }}>And this, which she did not mean to say</div>
+              <div className="prose" style={{ fontSize: 15 }}>{found.unsaid}</div>
+            </div>
+          )}
+          {!found.into.length && !found.limits.length && !found.unsaid && (
+            <div className="ui" style={{ fontSize: 12.5, color: "var(--ink-faint)", fontStyle: "italic", lineHeight: 1.6 }}>
+              Nothing yet. She has a whole card — what she wants, what she will not do, and one thing
+              she is not going to bring up — and none of it arrives by asking directly.
             </div>
           )}
         </div>
