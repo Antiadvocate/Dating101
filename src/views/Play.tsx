@@ -1,0 +1,1586 @@
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
+import { BookOpen, Eraser, ChevronDown, Feather, ChevronUp, Compass, CornerDownLeft, Crosshair, Globe, Hourglass, Image as ImageIcon, Leaf, Moon, MoreHorizontal, Play as PlayIcon, Plus, RotateCcw, Scale, Sparkles, Square, Utensils, Volume2, VolumeX, X , Ban } from "lucide-react";
+import { speak, stopSpeaking, ttsAvailable } from "../lib/tts";
+import { api, streamTurn, resumePending, governorState, displayProse, type ActionMode, type ClientSave } from "../lib/api";
+import Cast from "./Cast";
+
+import { CastPip, Vitals } from "../lib/charts";
+import { readSchedule } from "../engine/schedule";
+import type { SaveState } from "../engine/types";
+import { AnalogClock, WeatherIcon, asLine } from "../lib/format";
+import { estimateSaveWeight, leaveBreadcrumb } from "../lib/crash";
+import Atmosphere from "../lib/Atmosphere";
+import Backdrop from "../lib/Backdrop";
+import { sceneTone, reducedMotion, getAmbience, setAmbience, type AmbienceLevel } from "../lib/tone";
+import { AnimNumber } from "../lib/AnimNumber";
+import { Odometer } from "../lib/Odometer";
+import { turnDeltas } from "../lib/ledger";
+import { previouslyHere, dueSoon, dueLabel } from "../lib/psychic";
+
+const PHASE_LABEL: Record<string, string> = {
+  pressure: "reading the room",
+  narrator: "the world responds",
+  simulator: "recording changes",
+  apply: "applying consequences",
+  reflection: "updating memories",
+  "world-turning": "advancing the world",
+  eco: "eco — reduced spending today",
+  undertow: "updating world systems",
+  interlude: "days pass",
+};
+
+const MODES: { id: ActionMode; label: string }[] = [
+  { id: "do", label: "Do" },
+  { id: "story", label: "Story" },
+];
+
+interface Tip { name: string; x: number; y: number }
+
+export default function Play({ save, setSave }: { save: ClientSave; setSave: (s: ClientSave) => void }) {
+  const draftKey = `weft-draft-${save.id}`;
+  const [action, setAction] = useState(() => localStorage.getItem(draftKey) ?? "");
+  const [focused, setFocused] = useState(false);
+  const [mode, setMode] = useState<ActionMode>("do");
+  const [ground, setGround] = useState(false);
+  // SOMATIC TIGHTNESS — the player's own body reading 0–5 vs their meditative zero (undefined = let the
+  // engine infer from text). `baseline` routes it to the persistent ceiling instead of this-turn's scalar:
+  // "running low today" (bad sleep the clock can't see) rather than "this beat tightened me".
+  const [tightness, setTightness] = useState<number | undefined>(undefined);
+  const [baseline, setBaseline] = useState(false);
+  const [running, setRunning] = useState(false);
+  const [phase, setPhaseRaw] = useState<string | null>(null);
+  /** Which rail icon is open, if any. One at a time — a rail that can unfold three panels at once
+   *  is the row of text strips this replaced, wearing a chevron. */
+  const [railPanel, setRailPanel] = useState<"body" | "soon" | "focus" | null>(null);
+  /* EVERY PHASE CHANGE LEAVES A NOTE, because the failures players actually report here are the
+   * ones with nothing on screen: an async rejection that leaves this component `running` forever,
+   * or a tab the browser kills outright. Neither can draw anything by the time it happens, so what
+   * the app was doing has to already be written down. See lib/crash.ts. */
+  const setPhase = React.useCallback((p: string | null) => {
+    leaveBreadcrumb({ phase: p ?? undefined });
+    setPhaseRaw(p);
+  }, []);
+  // The player's own faculties reading the scene while the narrator writes it. Lands seconds
+  // into the wait and stays up until the prose starts arriving — the gap is the read.
+  const [reads, setReads] = useState<{ faculty: string; line: string }[]>([]);
+  const [liveProse, setLiveProse] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [rollbackOpen, setRollbackOpen] = useState(false);
+  const [rerunning, setRerunning] = useState<number | null>(null);
+  const [skipOpen, setSkipOpen] = useState(false);
+  const [montageMode, setMontageMode] = useState(false);
+  const [mDirection, setMDirection] = useState("");
+  const [mDays, setMDays] = useState(30);
+  const [mGran, setMGran] = useState<"quick" | "standard" | "full">("standard");
+  const [mWarnings, setMWarnings] = useState<string[]>([]);
+  const [scorecard, setScorecard] = useState<{ item: string; landed: boolean }[] | null>(null);
+  const [lightbox, setLightbox] = useState<string | null>(null);
+  const [skipping, setSkipping] = useState(false);
+  const [toasts, setToasts] = useState<{ id: number; text: string }[]>([]);
+  const [tip, setTip] = useState<Tip | null>(null);
+  const [illustrating, setIllustrating] = useState(false);
+  // guards the auto-painter against overlapping with the manual button (and with itself, when a
+  // turn commits while the previous picture is still on the GPU)
+  const illustratingRef = useRef(false);
+  const [observing, setObserving] = useState(false);
+  const [chaptering, setChaptering] = useState(false);
+  const [proseDone, setProseDone] = useState(false);
+  const [armedRollback, setArmedRollback] = useState<number | null>(null);
+  const [undoTurn, setUndoTurn] = useState<number | null>(null);
+  const pendingRef = useRef<string | null>(null);
+  const [drawer, setDrawer] = useState<null | "cast">(null);
+  const [drawerSel, setDrawerSel] = useState<string | null>(null);
+  const observingRef = useRef(false);
+  const runningRef = useRef(false);
+  const [hasPending, setHasPending] = useState(false);
+  // ── STOP ── A turn is two long calls back to back. Until you can interrupt them, a typo, a
+  // wrong name, or a scene going somewhere you did not mean has to be watched all the way to the
+  // end and then undone. The controller lives in a ref because the button that aborts it renders
+  // from a closure created before the turn started.
+  const cancelRef = useRef<AbortController | null>(null);
+  const [cancelling, setCancelling] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const toastId = useRef(0);
+  // the two summoning states of the decluttered surface: the "⋯" sheet of rare
+  // actions, and the compose extras (mode / web / tightness) behind the "+"
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [extrasOpen, setExtrasOpen] = useState(false);
+  // YOUR OWN WORDS — the in-flight action shows as a bubble the instant you send it (before the
+  // turn commits and it lands in history), and the echo-nav arrows walk you back through your
+  // committed messages so you never lose the line you typed under a long response.
+  const [liveAction, setLiveAction] = useState("");
+  const [echoNav, setEchoNav] = useState<number | null>(null); // index into echoes; null = parked at the bottom
+  const [flashTurn, setFlashTurn] = useState<number | null>(null);
+
+  const history = save.history;
+  const deltas = useMemo(() => turnDeltas(save), [save.telemetry, save.world.present]);
+  const recall = useMemo(() => previouslyHere(save), [save.world.player_location, save.memory, save.world.present]);
+  const soon = useMemo(() => dueSoon(save), [save.world.consequences, save.world.current_time]);
+  // recall is for RE-entry: show it when the place changes, let it go once you're playing here
+  const [recallDismissed, setRecallDismissed] = useState<string | null>(null);
+  useEffect(() => { setRecallDismissed(null); }, [save.world.player_location]);
+
+  // ── ambient layers: one tone derived from state drives particles, backdrop, prose cadence.
+  //    Readability rules them: cycles subtle → full → off, persisted locally. ──
+  const tone = useMemo(() => sceneTone(save), [save]);
+  const locale = save.world.places[save.world.player_location]?.name ?? "";
+  const [ambience, setAmb] = useState<AmbienceLevel>(getAmbience);
+  const cycleAmbience = () => {
+    const next: AmbienceLevel = ambience === "subtle" ? "full" : ambience === "full" ? "off" : "subtle";
+    setAmbience(next); setAmb(next);
+    pushToasts([`ambience: ${next}`]);
+  };
+
+  // ── session spend, shown in the menu sheet footer instead of a permanent line.
+  //    Turns carry telemetry; montage planner/chapter calls and images accumulate in
+  //    aux_spend — the footer shows both so the number matches the OpenRouter dashboard. ──
+  const spend = useMemo(() => {
+    const gov = governorState(save as any);
+    const sess = save.telemetry;
+    const inTok = sess.reduce((a, t) => a + t.narrator_tokens_in + t.simulator_tokens_in, 0);
+    const cached = sess.reduce((a, t) => a + (t.cached_tokens ?? 0), 0);
+    const hit = inTok > 0 ? Math.round((cached / inTok) * 100) : 0;
+    const cost = sess.reduce((a, t) => a + (t.turn_cost ?? 0), 0);
+    const aux = save.aux_spend ?? { images: 0, montage_calls: 0, tokens_in: 0, tokens_out: 0, cost: 0 };
+    return { gov, hit, cost, aux };
+  }, [save.telemetry, save.aux_spend]);
+
+  // ── state-driven fx: strikes flash red and decay; canon events ripple once ──
+  const [fx, setFx] = useState<null | "strike" | "canon">(null);
+  const fxTimer = useRef(0);
+  const flash = (kind: "strike" | "canon") => {
+    window.clearTimeout(fxTimer.current);
+    setFx(kind);
+    fxTimer.current = window.setTimeout(() => setFx(null), kind === "strike" ? 1000 : 1300);
+  };
+  const lastHistLen = useRef(history.length);
+  useEffect(() => {
+    if (history.length > lastHistLen.current) {
+      const latest = history[history.length - 1];
+      if ((latest?.shifts ?? []).some((s) => s.startsWith("CANON:"))) flash("canon");
+    }
+    lastHistLen.current = history.length;
+  }, [history.length]);
+
+  // ── per-word reveal bookkeeping: words already shown while streaming never re-animate ──
+  const revealCount = useRef(new Map<React.Key, number>());
+  const pendingReveal = useRef(new Map<React.Key, number>());
+  useEffect(() => {
+    if (!liveProse) { revealCount.current.clear(); pendingReveal.current.clear(); return; }
+    for (const [k, v] of pendingReveal.current) revealCount.current.set(k, v);
+  });
+
+  const [readingTurn, setReadingTurn] = useState<number | null>(null);
+  const [revealedTurn, setRevealedTurn] = useState<number | null>(null);
+  const toggleRead = (turn: number, prose: string) => {
+    if (readingTurn === turn) { stopSpeaking(); setReadingTurn(null); return; }
+    stopSpeaking();
+    setReadingTurn(turn);
+    speak(prose, () => setReadingTurn((cur) => (cur === turn ? null : cur)));
+  };
+  useEffect(() => () => stopSpeaking(), []); // leaving the view stops the reader
+  const nameIndex = useMemo(() => {
+    const ix: Record<string, string> = {};
+    for (const [id, c] of Object.entries(save.characters)) if (id !== "char_player") ix[c.name.toLowerCase()] = id;
+    for (const [id, c] of Object.entries(save.characters)) if (id !== "char_player") for (const a of c.aliases ?? []) if (a.trim().length >= 3 && !ix[a.toLowerCase()]) ix[a.toLowerCase()] = id;
+    return ix;
+  }, [save.characters]);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [liveProse, history.length, phase]);
+
+  // a new turn landing shifts every echo index — park the nav back at the live edge
+  useEffect(() => { setEchoNav(null); setFlashTurn(null); }, [history.length]);
+
+  // NEVER LOSE A DRAFT: tab switches, remounts, failures — it survives. localStorage, not
+  // sessionStorage, and the difference is the whole point on iOS. A home-screen web app is not
+  // suspended when you leave it, it is TERMINATED; coming back is a cold boot, a cold boot is a new
+  // session, and a new session has empty sessionStorage. So the one case this was written for —
+  // type a long action, look at something else, come back — was the exact case it did not cover.
+  useEffect(() => { try { localStorage.setItem(draftKey, action); } catch { /* quota */ } }, [action, draftKey]);
+  /* Which save, which turn, and how heavy it is — refreshed once a turn rather than once a phase,
+   * since the weight is the expensive half and it barely moves within a turn. A crash nobody
+   * witnessed is answered mostly by this line: a tab dies at a SIZE. */
+  useEffect(() => {
+    const { bytes, images } = estimateSaveWeight(save);
+    leaveBreadcrumb({ save_id: save.id, save_name: save.name, turn: save.world.current_turn, save_bytes: bytes, images });
+  }, [save.id, save.world.current_turn]);
+
+  const pushToasts = (lines: string[]) => {
+    lines.slice(0, 3).forEach((text, i) => {
+      setTimeout(() => {
+        const id = ++toastId.current;
+        setToasts((t) => [...t, { id, text }]);
+        setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3600);
+      }, i * 900);
+    });
+  };
+
+  /** PIPELINE OVERLAP — the prose is the part you read; the bookkeeping is the part you wait
+   *  for. Once the narrator finishes streaming, the composer re-arms while the bookkeeper works
+   *  in the background: type freely, and a submitted action queues and fires the instant the
+   *  turn commits. On a slow bookkeeper this hides most or all of its latency behind the time
+   *  you'd spend reading and typing anyway. One action queues; a failed turn returns it. */
+  /** After a turn commits, if any character's on-sight appearance changed, re-score their
+   *  intrinsic beauty in the background (one small AI call per changed character) and fold the
+   *  updated save back in. Silent and non-blocking — a stale beauty for one turn is harmless. */
+  const flushBeautyRescore = async (s: ClientSave) => {
+    if (!s.pending_beauty_rescore?.length) return;
+    try {
+      await api.rescoreBeauty(s.id);
+      const fresh = await api.save(s.id);
+      if (fresh) setSave(fresh);
+    } catch { /* non-critical; will retry on the next appearance change */ }
+  };
+
+  /** A person who entered from the prose arrives as a name and nothing else — no appearance, no
+   *  traits, no values. Finish those records in the background, one small call each, reading the
+   *  player's own words and the prose they appeared in. Silent; retried after the next turn if it
+   *  fails. See engine/sketch.ts. */
+  const flushSketches = async (s: ClientSave) => {
+    if (!s.characters) return;
+    const hollow = Object.entries(s.characters).some(([id, c]: any) =>
+      id !== "char_player" && c.status !== "dead" && c.status !== "departed" &&
+      (c.provisional === true || (!String(c.appearance_facts ?? "").trim() && !(c.core_traits ?? []).length)));
+    if (!hollow) return;
+    try {
+      const fresh = await api.completeSketches(s.id);
+      if (fresh) setSave(fresh);
+    } catch { /* non-critical; retried after the next turn */ }
+  };
+
+  /** A place the story has been played in but never written down is invisible to the narrator, and
+   *  one flagged out of date makes it describe something no longer there. The bookkeeper is asked
+   *  for these in-turn; this catches what it misses. See engine/placedesc.ts. */
+  const flushPlaceDescriptions = async (s: ClientSave) => {
+    const places = Object.values<any>(s.world?.places ?? {});
+    if (!places.some((p) => p.id !== "loc_offscene" && (!String(p.description_facts ?? "").trim() || p.stale_note))) return;
+    try {
+      const fresh = await api.describePlaces(s.id);
+      if (fresh) setSave(fresh);
+    } catch { /* non-critical; retried after the next turn */ }
+  };
+
+  const flushPostTurn = (s: ClientSave) => { void flushBeautyRescore(s); void flushSketches(s); void flushPlaceDescriptions(s); void flushIllustration(s); };
+
+  const runAction = async (a: string) => {
+    if (!a) return;
+    setAction(""); setError(null); setRunning(true); runningRef.current = true; setProseDone(false); setLiveProse(""); setReads([]); setPhase("pressure");
+    setLiveAction(a); // your words go up as a bubble immediately — they anchor the reading while the world works
+    let failed = false;
+    let cancelled = false;
+    const ctrl = new AbortController();
+    cancelRef.current = ctrl;
+    try {
+      await streamTurn(save.id, a, mode, {
+        onPhase: (p) => { setPhase(p); if (p && p !== "pressure" && p !== "narrator" && p !== "eco") setProseDone(true); },
+        onRead: setReads,
+        onDelta: (t) => setLiveProse((p) => p + t),
+        onMeta: (m) => { if (Array.isArray((m as any).shifts)) pushToasts((m as any).shifts as string[]); },
+        onDone: (s) => {
+          setSave(s); setLiveProse(""); setReads([]); setPhase(null); localStorage.removeItem(draftKey); flushPostTurn(s);
+          // the stop landed after the last exit — the world already moved, so say so rather than
+          // pretending the turn was thrown away
+          if (ctrl.signal.aborted) pushToasts(["too late to stop — the turn had already been recorded"]);
+        },
+        onError: (msg) => { setError(msg); failed = true; },
+        onCancel: () => { cancelled = true; setLiveProse(""); setReads([]); },
+      }, { ground, tightness, signal: ctrl.signal });
+    } catch (e: any) {
+      if (e.name !== "AbortError") { setError(e.message ?? "turn failed"); failed = true; }
+    } finally {
+      cancelRef.current = null; setCancelling(false);
+      setRunning(false); runningRef.current = false; setProseDone(false); setPhase(null); setLiveAction("");
+      // reactive tightness is a per-turn reading — it clears once the turn commits (a spike, not a setting).
+      // the baseline (ceiling) is separate and persists in save state until the player clears it.
+      if (!failed && !cancelled) setTightness(undefined);
+      const pend = pendingRef.current; pendingRef.current = null; setHasPending(false);
+      // A stopped turn gives the words back exactly like a failed one — that is the whole point of
+      // stopping: you wanted to change what you said. A queued follow-up comes back with them
+      // rather than firing into the turn you just cancelled.
+      if (failed || cancelled) setAction(pend ? `${a}\n${pend}` : a);
+      else if (pend) void runAction(pend);               // fire the queued action immediately
+      if (cancelled) pushToasts(["stopped — nothing was recorded, your words are back"]);
+    }
+  };
+
+  /** Cancellable up to the last exit: once consequences start applying, the world has moved. */
+  const CANCELLABLE = ["undertow", "pressure", "narrator", "simulator", "eco"];
+  const canStop = running && !!phase && CANCELLABLE.includes(phase) && !!cancelRef.current;
+  const doStop = () => {
+    const c = cancelRef.current;
+    if (!c || c.signal.aborted) return;
+    setCancelling(true);
+    c.abort();
+  };
+
+  useEffect(() => {
+    api.hasRollbackRecovery(save.id).then((r) => setUndoTurn(r.available ? (r.turn ?? 0) : null)).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [save.id]);
+
+  // ── RESUME A TURN KILLED MID-FLIGHT (iOS suspends backgrounded pages): on open and on
+  // returning to the app, finish any journaled turn — bookkeeping only, no narrator re-buy.
+  useEffect(() => {
+    let busy = false;
+    const tryResume = async () => {
+      // runningRef, not the `running` state: this closure is created once per save and the
+      // state value goes stale — the old check let a resume fire DURING a live turn (clearing
+      // its crash journal, or re-running the simulator against a half-finished turn).
+      if (busy || runningRef.current) return;
+      busy = true;
+      let touched = false;
+      try {
+        const r = await resumePending(save.id, { onPhase: (p) => { touched = true; setRunning(true); setPhase(p ?? "simulator"); } });
+        if (r.kind === "restore_action") { setAction((a) => a || r.action); pushToasts(["that turn never finished — your action is back in the input box"]); }
+        if (r.kind === "completed") {
+          setSave(r.save);
+          pushToasts([r.cutShort
+            ? "that turn was cut short when the app closed — kept what the narrator had written. Roll back if you'd rather re-run it"
+            : "finished recording the interrupted turn"]);
+        }
+      } catch { /* journal stays; next resume retries */ }
+      finally { busy = false; if (touched) { setRunning(false); setPhase(null); } }
+    };
+    void tryResume();
+    const onVis = () => { if (document.visibilityState === "visible") void tryResume(); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [save.id]);
+
+  const submit = async () => {
+    const a = action.trim();
+    if (!a) return;
+    if (running) {
+      if (proseDone && !pendingRef.current) { pendingRef.current = a; setHasPending(true); setAction(""); pushToasts(["queued — sends when this turn finishes recording"]); }
+      return;
+    }
+    await runAction(a);
+  };
+
+  const doRollback = async (turn: number) => {
+    const loss = save.world.current_turn - turn;
+    // ARMED CONFIRM: any rollback erasing more than 10 turns takes two deliberate taps, with
+    // the cost stated. One mistap must never eat a campaign.
+    if (loss > 10 && armedRollback !== turn) { setArmedRollback(turn); return; }
+    setArmedRollback(null); setRollbackOpen(false);
+    const before = save.world.current_turn;
+    setSave(await api.rollback(save.id, turn));
+    setUndoTurn(before);
+    pushToasts([`rolled back to turn ${turn} — undo available`]);
+  };
+
+  const doUndoRollback = async () => {
+    try { setSave(await api.undoRollback(save.id)); setUndoTurn(null); pushToasts(["rollback undone"]); }
+    catch (e: any) { setError(e.message ?? "nothing to undo"); }
+  };
+
+  /** Re-run the bookkeeper on a turn whose prose is fine but whose bookkeeping died. */
+  const doRerun = async (turn: number) => {
+    if (rerunning !== null) return;
+    setRerunning(turn);
+    const before = save.world.current_turn;
+    try {
+      setSave(await api.rerunBookkeeper(save.id, turn, { onPhase: () => {}, onDelta: () => {}, onMeta: () => {} }));
+      setUndoTurn(before);
+      pushToasts(["bookkeeper re-run — the prose is unchanged"]);
+    } catch (e: any) { setError(e.message ?? "re-run failed"); }
+    finally { setRerunning(null); }
+  };
+
+  /** THE VETO. Strike what the narrator invented — roll back past it and forbid it forever. */
+  const doStrike = async (turn: number) => {
+    const what = prompt(
+      `Strike from the story — what did the narrator INVENT that never happened?\n\nEverything from turn ${turn} on is rolled back, and what you write is voided forever: never mentioned, never explained, its traces purged.\n\nState the FALSE thing, not the rule it broke — e.g. "There is a boy named Leo." (If the narrator ignored a rule that SHOULD be true, use "law" instead.)`
+    );
+    if (!what?.trim()) return;
+    const before = save.world.current_turn;
+    try {
+      // Snapshot N is taken BEFORE turn N runs, so striking turn N means restoring snapshot N —
+      // passing turn-1 here used to erase turn N-1 along with it (the "past 2 turns" bug).
+      setSave(await api.strike(save.id, what.trim(), turn));
+      setUndoTurn(before);
+      flash("strike");
+      pushToasts([`struck — rolled back to turn ${turn - 1}`, "the narrator will never write it again"]);
+    } catch (e: any) { setError(e.message ?? "strike failed"); }
+  };
+
+  /** THE CORRECTION. The narrator ignored or explained away a rule that IS true — affirm the rule
+   *  as world law. Nothing rolls back, nothing is purged; the law simply binds from here on. */
+  const doCorrect = async () => {
+    const what = prompt(
+      `Correct the record — what is TRUE that the narrator got wrong?\n\nState the rule as law. It is affirmed as supreme truth and canonized immediately: the fiction adapts to it, consequences assert themselves, and the narrator can never explain it away.\n\ne.g. "Foot massages longer than 10 minutes cause escalating pain for Wym unless the masseur is being penetrated."\n\nNothing is rolled back or erased.`
+    );
+    if (!what?.trim()) return;
+    try {
+      setSave(await api.correct(save.id, what.trim()));
+      pushToasts(["correction recorded as world law", "the narrator must confirm it, never litigate it"]);
+    } catch (e: any) { setError(e.message ?? "correction failed"); }
+  };
+
+  const doSkip = async (days: number) => {
+    if (skipping) return;
+    setSkipOpen(false); setSkipping(true); setError(null); setPhase("world-turning");
+    try {
+      const s = await api.advance(save.id, days);
+      setSave(s);
+      const latest = s.history[s.history.length - 1];
+      if (latest?.shifts?.length) pushToasts(latest.shifts);
+    } catch (e: any) { setError(e.message ?? "time skip failed"); }
+    finally { setSkipping(false); setPhase(null); }
+  };
+
+  const doMontage = async () => {
+    if (skipping || !mDirection.trim()) return;
+    setSkipOpen(false); setSkipping(true); setError(null); setScorecard(null);
+    setPhase("planning the montage");
+    try {
+      const { save: s, scorecard: sc } = await api.montage(
+        save.id, mDays, mDirection.trim(), mGran, (p) => setPhase(p),
+      );
+      setSave(s);
+      setScorecard(sc);
+      const missed = sc.filter((x) => !x.landed);
+      pushToasts(missed.length
+        ? [`Montage done — ${sc.length - missed.length}/${sc.length} landed. Missed: ${missed.map((m) => m.item).join(", ")}`]
+        : [`Montage done — everything landed.`]);
+    } catch (e: any) { setError(e.message ?? "montage failed"); }
+    finally { setSkipping(false); setPhase(null); }
+  };
+
+  /** Observer: run ONE autonomous turn. You watch; the world and your own character
+   *  act on their own. One press = one beat. */
+  const runObserve = async () => {
+    if (running || observingRef.current) return;
+    observingRef.current = true; setObserving(true); setError(null);
+    setRunning(true); runningRef.current = true; setLiveProse(""); setReads([]); setPhase("pressure");
+    const ctrl = new AbortController();
+    cancelRef.current = ctrl;
+    await new Promise<void>((resolve) => {
+      streamTurn(save.id, "", "story", {
+        onPhase: setPhase,
+        onRead: setReads,
+        onDelta: (t) => setLiveProse((p) => p + t),
+        onMeta: (m) => { if (Array.isArray((m as any).shifts)) pushToasts((m as any).shifts as string[]); },
+        onDone: (s) => { setSave(s); setLiveProse(""); setReads([]); setPhase(null); flushPostTurn(s); resolve(); },
+        onError: (msg) => { setError(msg); resolve(); },
+        onCancel: () => { setLiveProse(""); setReads([]); pushToasts(["stopped — that beat was not recorded"]); resolve(); },
+      }, { observe: true, signal: ctrl.signal }).catch((e) => { setError(e?.message ?? "turn failed"); resolve(); });
+    });
+    cancelRef.current = null; setCancelling(false);
+    setRunning(false); runningRef.current = false; setPhase(null);
+    observingRef.current = false; setObserving(false);
+  };
+
+  const illustrateLatest = async () => {
+    if (illustratingRef.current || !history.length) return;
+    illustratingRef.current = true; setIllustrating(true); setError(null);
+    try {
+      const { save: s } = await api.illustrate(save.id, history[history.length - 1].turn);
+      setSave(s);
+    } catch (e: any) { setError(e.message); } finally { illustratingRef.current = false; setIllustrating(false); }
+  };
+
+  /** THE PICTURE THAT ARRIVES BY ITSELF.
+   *
+   *  Off unless the save asks for it, and it is meant for the local sampler (Settings → Local
+   *  images), where a picture a turn costs seconds and no money. Three rules make it safe to run
+   *  after every turn:
+   *
+   *  - it runs AFTER the turn has committed, so nothing about the prose waits on the GPU;
+   *  - a failure is swallowed. A picture that didn't paint must never look like a turn that
+   *    didn't happen — the error would land in the same red bar the engine's own failures use;
+   *  - it only writes the save back if no NEWER turn has started meanwhile. The illustration is
+   *    already persisted by then either way, so the next commit brings it to the page; setting
+   *    stale state over a running turn is the one thing here that could actually lose work. */
+  const flushIllustration = async (s: ClientSave) => {
+    if (!s.model_settings.auto_illustrate || illustratingRef.current) return;
+    const last = s.history[s.history.length - 1];
+    if (!last || last.illustration_url || last.kind === "interlude") return;
+    illustratingRef.current = true; setIllustrating(true);
+    try {
+      const { save: after } = await api.illustrate(s.id, last.turn);
+      if (!runningRef.current) setSave(after);
+    } catch { /* the turn stands whether or not it got a picture */ }
+    finally { illustratingRef.current = false; setIllustrating(false); }
+  };
+
+  const setNarratorDirection = async () => {
+    const cur = save.world_bible.narrator_direction ?? "";
+    const next = window.prompt("Standing direction for the narrator — takes effect on the next turn, overrides everything. What is this story about, or how should it be told? (blank to clear)", cur);
+    if (next === null) return; // cancelled
+    setSave(await api.edit(save.id, { world_bible: { narrator_direction: next.trim() } }));
+  };
+
+  /** GENRE / REGISTER. Rendered at the top of every narrator call as "the register this whole story
+   *  is written in", and until now it was set once at the Forge and never shown again — so a value
+   *  written by something other than the player was invisible and permanent. */
+  const setTone = async () => {
+    const cur = save.world_bible.tone ?? "";
+    const next = window.prompt(
+      "GENRE & REGISTER — the key this whole story is written in. The narrator reads this every turn, above almost everything else. (blank to clear)",
+      cur,
+    );
+    if (next === null) return; // cancelled
+    setSave(await api.edit(save.id, { world_bible: { tone: next.trim() } }));
+  };
+
+  const setFocusPrompt = async () => {
+    const hottest = [...save.world.threads].sort((a, b) => b.tension - a.tension)[0];
+    const suggest = save.world.consequences.find((c) => c.status === "pending")?.description || hottest?.title || "";
+    const ev = window.prompt("Drive toward which event? The story will build toward it (no new chaos), then automatically shift into it when it arrives.", suggest);
+    if (ev && ev.trim()) setSave(await api.setFocus(save.id, ev.trim()));
+  };
+
+  const correctClock = async () => {
+    const cur = save.world.current_time;
+    const next = window.prompt("Set the in-world time (e.g. \"Day 2, 08:00\" or \"Day 3, 14:30\"):", cur.replace(/\s*\(.*\)$/, ""));
+    if (next && next.trim() && next.trim() !== cur) setSave(await api.setTime(save.id, next.trim()));
+  };
+
+  /** Draw the line the models read from — or lift it again. The story stays on the page either way. */
+  const clearLog = async () => {
+    const cleared = save.world.context_from_turn ?? 0;
+    if (cleared) {
+      if (!confirm("Let the narrator see the whole log again? Nothing was deleted — this just moves the line back.")) return;
+      try { setSave(await api.clearLog(save.id, { restore: true })); }
+      catch (e: any) { alert(`Failed: ${e.message}`); }
+      return;
+    }
+    if (!confirm("Clear the log?\n\nThe narrator and every other pass stop reading the turns before this one, so context and repetition drop. The last beat is kept so the next turn is not written blind.\n\nNothing is deleted: the whole story stays on this page, in the Chronicle and in the export, and you can undo this from the same menu. Memories, relationships and the world are untouched.")) return;
+    try { setSave(await api.clearLog(save.id)); }
+    catch (e: any) { alert(`Failed: ${e.message}`); }
+  };
+
+  const refreshMemory = async () => {
+    if (!confirm("Refresh this game? Same moment, same people and relationships — the bookkeeper condenses each character's memory to clear accumulated drift, keeping the full record underneath, and clears stale threads/consequences so runaway plots stop regenerating. No time skip. This can take a moment as it processes each character.")) return;
+    setChaptering(true);
+    try { setSave(await api.refreshContext(save.id)); }
+    catch (e: any) { alert(`Refresh failed: ${e.message}`); }
+    finally { setChaptering(false); }
+  };
+
+  /** Per-word settle-in for the live paragraph. Cadence comes from the scene tone —
+   *  tense reads fast, meditative drifts. `counter` tracks the paragraph-global word
+   *  index and how many words were already revealed while streaming, so text that has
+   *  settled never re-animates as new words arrive. */
+  type RevealCounter = { i: number; from: number };
+  const revealWords = (text: string, keyBase: string, counter: RevealCounter): React.ReactNode[] => {
+    const dur = `${Math.min(700, 240 + tone.revealMs * 8)}ms`;
+    return text.split(/(\s+)/).map((tok, ti) => {
+      if (!tok || /^\s+$/.test(tok)) return tok;
+      const idx = counter.i++;
+      if (idx < counter.from) return tok;
+      return (
+        <span key={`${keyBase}-w${ti}`} className="w-in"
+          style={{ animationDelay: `${Math.min(idx - counter.from, 40) * tone.revealMs}ms`, ["--w-dur" as any]: dur }}>
+          {tok}
+        </span>
+      );
+    });
+  };
+
+  /** Disco-style prose renderer: "dialogue" gets the accent ink; known names become tappable refs. */
+  const renderParagraph = (text: string, key: React.Key, animate: boolean) => {
+    const counter: RevealCounter | null = animate && !reducedMotion()
+      ? { i: 0, from: revealCount.current.get(key) ?? 0 } : null;
+    const nodes: React.ReactNode[] = [];
+    // split on double-quoted spans (straight + curly)
+    const parts = text.split(/("[^"]+"|“[^”]+”)/g);
+    parts.forEach((part, pi) => {
+      const isDlg = /^["“]/.test(part);
+      const sub = renderNames(part, `${key}-${pi}`, counter);
+      nodes.push(isDlg ? <span key={`${key}-${pi}`} className="dlg">{sub}</span> : <React.Fragment key={`${key}-${pi}`}>{sub}</React.Fragment>);
+    });
+    if (counter) pendingReveal.current.set(key, counter.i);
+    return <p key={key} style={animate ? undefined : { animation: "none" }}>{nodes}</p>;
+  };
+
+  const renderNames = (text: string, keyBase: string, counter?: RevealCounter | null): React.ReactNode[] => {
+    const names = Object.keys(nameIndex).filter((n) => n.length >= 2);
+    const plain = (s: string, k: string): React.ReactNode[] =>
+      counter ? revealWords(s, k, counter) : [s];
+    if (!names.length) return plain(text, keyBase);
+    const re = new RegExp(`\\b(${names.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})\\b`, "gi");
+    const out: React.ReactNode[] = [];
+    let last = 0; let m: RegExpExecArray | null; let i = 0;
+    while ((m = re.exec(text))) {
+      if (m.index > last) out.push(...plain(text.slice(last, m.index), `${keyBase}-p${i}`));
+      const nm = m[0];
+      const idx = counter ? counter.i++ : 0;
+      const revealing = counter && idx >= counter.from;
+      out.push(
+        <span key={`${keyBase}-n${i++}`} className={revealing ? "name-ref w-in" : "name-ref"}
+          style={revealing ? { animationDelay: `${Math.min(idx - counter!.from, 40) * tone.revealMs}ms` } : undefined}
+          onClick={(e) => {
+            const r = (e.target as HTMLElement).getBoundingClientRect();
+            setTip({ name: nm, x: r.left, y: r.bottom });
+          }}>{nm}</span>
+      );
+      last = m.index + nm.length;
+    }
+    if (last < text.length) out.push(...plain(text.slice(last), `${keyBase}-pt`));
+    return out;
+  };
+
+  const tipChar = tip ? save.characters[nameIndex[tip.name.toLowerCase()]] : null;
+  const tipId = tipChar?.character_id;
+  const tipPsy = tipId ? save.condition[tipId]?.psyche : null;
+  const tipEdge = tipId ? save.world.edges.find((e) => e.from === tipId && e.to === "char_player") : null;
+  const tipMem = tipId ? save.memory[tipId]?.episodic.slice(-1)[0] : null;
+  // theory of mind: what THEY believe about you, and how far it's drifted from the truth
+  const tipBelief = tipId ? (save as any).minds?.[tipId]?.about?.find((b: any) => b.target === "char_player") : null;
+  const tipDivergence = tipBelief && tipEdge ? Math.abs((tipEdge.warmth ?? 0) - tipBelief.predicted_warmth) : 0;
+
+  const shortTime = save.world.current_time.replace(/\s*\(.*\)$/, "");
+
+  // ── ECHO NAV — your committed messages, oldest to newest. The latest one renders as a bubble;
+  //  the arrows beside the composer walk you back through them (and forward, and home to the
+  //  bottom), flashing the target so the eye lands where the scroll lands. ──
+  const echoes = useMemo(
+    () => history.filter((h) => h.kind !== "interlude" && h.kind !== "opening" && (h.player_action ?? "").trim()),
+    [history]
+  );
+  const latestEchoTurn = echoes.length ? echoes[echoes.length - 1].turn : null;
+  const jumpToEcho = (dir: -1 | 1) => {
+    if (!echoes.length) return;
+    const cur = echoNav === null ? echoes.length : echoNav; // null = parked past the newest, at the bottom
+    let next = cur + dir;
+    if (next >= echoes.length) { // stepped past the newest → glide home to the live edge
+      setEchoNav(null); setFlashTurn(null);
+      const el = scrollRef.current;
+      if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+      return;
+    }
+    if (next < 0) next = 0;
+    setEchoNav(next);
+    const turn = echoes[next].turn;
+    setFlashTurn(turn);
+    window.setTimeout(() => setFlashTurn((t) => (t === turn ? null : t)), 1400);
+    const container = scrollRef.current;
+    const el = container?.querySelector(`#echo-${turn}`) as HTMLElement | null;
+    if (container && el) container.scrollTo({ top: el.offsetTop - 14, behavior: "smooth" });
+  };
+
+  return (
+    <div className="h-full flex flex-col">
+      {/* toasts */}
+      <div className="toast-stack">
+        <AnimatePresence>
+          {toasts.map((t) => (
+            <motion.div key={t.id} className="toast"
+              initial={{ opacity: 0, y: -10, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.3, ease: [0.2, 0.8, 0.2, 1] }}>
+              {t.text}
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
+
+      {/* STATUS LINE — one slim row: your body, the pressure trace, the clock, and
+          the "⋯" that holds everything you only touch once in a while. */}
+      <div className="px-3 pt-1.5 pb-1 flex items-center gap-1.5">
+        {(() => {
+          const r = (save as any).condition?.["char_player"]?.psyche?.relaxation ?? 0;
+          const color = r <= -7 ? "var(--danger)" : r <= -3 ? "var(--accent)" : r >= 4 ? "var(--calm)" : "var(--text-lo)";
+          const amp = 1.04 + ((r + 10) / 20) * 0.14; // clenched breathes shallow, open breathes deep
+          return (
+            <div className="breath-orb" data-tour="play-orb" title={`openness: ${r >= 4 ? "open" : r <= -7 ? "clenched tight" : r <= -3 ? "guarded" : "level"}`}
+              style={{ background: color, boxShadow: `0 0 10px ${color}`, opacity: 0.85,
+                ["--breath-s" as any]: `${tone.breathS}s`, ["--breath-amp" as any]: amp }} />
+          );
+        })()}
+        {/* WHO IS HERE — faces, overlapping, no names. The strip under the prose said the same
+            thing in words and cost a row of the page; a face with a warmth-coloured ring and an arc
+            for how open they are says more of it than the name did. Tap one to open them. */}
+        {save.world.present.length > 0 && (
+          <div className="flex items-center shrink-0" data-tour="play-present" style={{ paddingLeft: 2 }}>
+            <AnimatePresence initial={false}>
+              {save.world.present.slice(0, 4).map((pid, i) => {
+                const ch = save.characters[pid];
+                if (!ch) return null;
+                const e = save.world.edges.find((x) => x.from === pid && x.to === "char_player");
+                const due = readSchedule(save as unknown as SaveState, pid).pending;
+                const arriving = (save.world.arrivals_pending ?? []).includes(ch.name);
+                const aimed = !!ch.drive?.goal && /\bplayer\b/i.test(ch.drive.goal);
+                return (
+                  <div key={pid} style={{ marginLeft: i ? -7 : 0, zIndex: 10 - i }}>
+                    <CastPip name={ch.name} portrait={ch.portrait_url} label={false} size={22}
+                      warmth={e?.warmth ?? 0} openness={save.condition[pid]?.psyche?.relaxation ?? 0}
+                      flag={due ? "leaving" : arriving ? "arrived" : aimed ? "wants" : null}
+                      onClick={() => { setDrawerSel(pid); setDrawer("cast"); }} />
+                  </div>
+                );
+              })}
+            </AnimatePresence>
+            {save.world.present.length > 4 && (
+              <span className="font-mono shrink-0" style={{ fontSize: 9, color: "var(--text-lo)", marginLeft: 3 }}>
+                +{save.world.present.length - 4}
+              </span>
+            )}
+          </div>
+        )}
+        {/* The pressure seismograph used to live here and it is gone. Its overlay was the engine's
+            estimate of the PLAYER'S own mood — a guess about the one person on screen who does not
+            need to be guessed at — and the bars underneath were a controller reading nobody plays
+            by. It is still in the Chronicle, where a read-out of how the story has been running
+            belongs. The rail is for things you act on. */}
+        <div className="flex-1" />
+        {/* THE BODY, as one dot. It only earns attention when something is actually low, so an
+            unremarkable body is a dim mark and a failing one is a red one. Tap for the three bars. */}
+        {(() => {
+          const c = save.condition["char_player"];
+          if (!c) return null;
+          const worst = Math.min(
+            1 - (c.hunger_meter ?? 2) / 10,
+            1 - (c.thirst_meter ?? 2) / 10,
+            1 - (c.awake_minutes ?? 0) / 1080,
+          );
+          if (worst > 0.55 && railPanel !== "body") return null;   // nothing to say: stay off the rail
+          const col = worst < 0.28 ? "var(--danger)" : worst < 0.55 ? "var(--accent)" : "var(--text-lo)";
+          return (
+            <button className="icon-btn shrink-0" title="your body" aria-label="your body"
+              onClick={() => setRailPanel(railPanel === "body" ? null : "body")}>
+              <Utensils size={13} style={{ color: col }} />
+            </button>
+          );
+        })()}
+        {/* ANYTHING COMING DUE — a count, not a list. */}
+        {soon.length > 0 && (
+          <button className="icon-btn shrink-0 relative" title="coming due" aria-label="coming due"
+            onClick={() => setRailPanel(railPanel === "soon" ? null : "soon")}>
+            <Hourglass size={13} style={{ color: soon.some((d) => d.severity === "major") ? "var(--danger)" : "var(--text-lo)" }} />
+            <span className="font-mono" style={{ fontSize: 8, marginLeft: 1, color: "var(--text-lo)" }}>{soon.length}</span>
+          </button>
+        )}
+        {save.world.focus && (
+          <button className="icon-btn shrink-0" title={save.world.focus.label} aria-label="focus"
+            onClick={() => setRailPanel(railPanel === "focus" ? null : "focus")}>
+            <Crosshair size={13} style={{ color: "var(--accent)" }} />
+          </button>
+        )}
+        <button className="icon-btn" style={{ maxWidth: 128 }} onClick={correctClock} data-tour="play-clock"
+          title="in-world time — tap to correct it when the bookkeeper drifts from the prose">
+          <span className="truncate" style={{ fontSize: 10 }}>
+            <Odometer text={shortTime} />
+          </span>
+        </button>
+        <button className="icon-btn" onClick={() => setMenuOpen(true)} aria-label="more actions" title="more actions" data-tour="play-more"
+          style={{ border: "1px solid var(--line)" }}>
+          <MoreHorizontal size={16} />
+        </button>
+      </div>
+
+      {/* prose scroll — ambient layers (seeded backdrop + tone-driven particles) sit beneath it */}
+      <div className="relative flex-1 min-h-0" data-tour="play-prose">
+        {ambience !== "off" && <Backdrop tone={tone} locale={locale} level={ambience} />}
+        {ambience !== "off" && <Atmosphere tone={tone} level={ambience} />}
+        {ambience !== "off" && <div className="prose-scrim" aria-hidden />}
+        {fx && <div className={fx === "strike" ? "fx-strike" : "fx-canon"} aria-hidden />}
+        <div ref={scrollRef} className="scroll-y h-full px-5 pb-4 relative" style={{ zIndex: 1 }}>
+        {history.length === 0 && !liveProse && (
+          <div className="pt-10 text-center">
+            <div className="font-display text-lg mb-1.5">Ready to begin.</div>
+            <div className="text-[13.5px]" style={{ color: "var(--text-mid)" }}>
+              Type an action or narration. The world responds — and keeps moving when you look away.
+            </div>
+          </div>
+        )}
+        <div className="prose-stream pt-3">
+          {/* previously, here — place-indexed recall on re-entry. Not persistent chrome:
+              it appears when you arrive somewhere you have history, and goes when dismissed. */}
+          <AnimatePresence>
+            {recall.length > 0 && recallDismissed !== save.world.player_location && (
+              <motion.div className="recall-card"
+                initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.3 }}>
+                <div className="recall-head">
+                  <span>previously, here</span>
+                  <button onClick={() => setRecallDismissed(save.world.player_location)}
+                    style={{ color: "var(--text-lo)" }}>dismiss</button>
+                </div>
+                {recall.map((r) => (
+                  <div key={r.key} className="recall-line">
+                    {r.text}
+                    {r.when && <span className="recall-when"> · {r.when}</span>}
+                  </div>
+                ))}
+                {recall[0]?.shared && (
+                  <div className="recall-line" style={{ color: "var(--text-lo)" }}>
+                    {recall[0].shared} was here too.
+                  </div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+          {history.map((h) => (
+            <div className={h.turn === history[history.length - 1]?.turn ? undefined : "turn-block"} key={`${h.kind ?? "turn"}-${h.turn}`}>
+              {/* Where the narrator's reading starts. Everything above is still yours to scroll and
+                  still in the export — it is simply no longer being fed forward. */}
+              {save.world.context_from_turn === h.turn && h.turn > (history[0]?.turn ?? 0) && (
+                <div className="interlude my-5">
+                  <div className="interlude-rule"><span>the narrator reads from here</span></div>
+                </div>
+              )}
+              {h.kind === "interlude" ? (
+                <div className="interlude my-5">
+                  <div className="interlude-rule"><span>✦ {h.span_label} ✦</span></div>
+                  {displayProse(h).split(/\n{2,}/).map((p, i) => (
+                    <p key={i} className="interlude-prose" style={{ animation: "none" }}>{p}</p>
+                  ))}
+                  <div className="interlude-rule"><span>{h.time_label}</span></div>
+                </div>
+              ) : h.kind === "opening" ? (
+                <div className="interlude-rule mb-3"><span>the beginning</span></div>
+              ) : (
+              <div id={`echo-${h.turn}`}
+                className={
+                  "player-echo"
+                  + (h.turn === latestEchoTurn ? " latest" : "")
+                  + (h.turn === flashTurn ? " flash" : "")
+                }>
+                {h.action_mode === "say" ? `“${h.player_action}”` : h.player_action}
+              </div>
+              )}
+              {h.kind !== "interlude" && h.illustration_url && <img className="scene-img" src={h.illustration_url} alt="" onClick={() => setLightbox(h.illustration_url!)} style={{ cursor: "zoom-in" }} />}
+              {h.kind !== "interlude" && displayProse(h).trim() ? (
+                <div
+                  onClick={(e) => {
+                    // tap the prose to reveal this turn's actions — but not when tapping a character name (that opens the tip)
+                    if ((e.target as HTMLElement).closest(".name-ref")) return;
+                    setRevealedTurn((cur) => (cur === h.turn ? null : h.turn));
+                  }}
+                  style={{ cursor: "pointer" }}
+                >
+                  {displayProse(h).split(/\n{2,}/).map((p, i) => renderParagraph(p, `${h.turn}-${i}`, false))}
+                </div>
+              ) : null}
+              {h.kind !== "interlude" && displayProse(h).trim() && (h.bookkeeping === "thin" || h.bookkeeping === "failed") && (
+                <div className="flex items-center gap-2 mb-1.5 p-2 rounded-lg" style={{ background: "var(--ink-1)" }}>
+                  <div className="flex-1 text-[11.5px] leading-snug" style={{ color: "var(--text-mid)" }}>
+                    {h.bookkeeping === "failed"
+                      ? "The bookkeeper failed on this turn — nothing was recorded."
+                      : "The bookkeeper recorded nothing here. Nobody remembered this."}
+                  </div>
+                  <button className="chip shrink-0" disabled={rerunning !== null}
+                    onClick={() => doRerun(h.turn)}
+                    title="re-run the bookkeeper on this turn — the prose is kept, only the record is rebuilt">
+                    {rerunning === h.turn ? "re-running…" : "re-run"}
+                  </button>
+                </div>
+              )}
+              <AnimatePresence>
+                {h.kind !== "interlude" && displayProse(h).trim() && revealedTurn === h.turn && (
+                  <motion.div className="turn-actions"
+                    initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.22 }}>
+                    <button className="turn-action"
+                      onClick={() => doStrike(h.turn)}
+                      title="strike an invention from the story — roll back past it and void it forever">
+                      <Ban size={12} /> strike
+                    </button>
+                    <button className="turn-action"
+                      onClick={doCorrect}
+                      title="correct the record — affirm a rule the narrator ignored as world law; nothing is rolled back">
+                      <Scale size={12} /> law
+                    </button>
+                    <button className="turn-action" disabled={rerunning !== null}
+                      onClick={() => doRerun(h.turn)}
+                      title="re-run the bookkeeper — keeps the prose, rebuilds memories and feelings">
+                      <RotateCcw size={12} /> {rerunning === h.turn ? "re-running…" : "re-run"}
+                    </button>
+                    {ttsAvailable() && (
+                      <button className="turn-action"
+                        style={readingTurn === h.turn ? { color: "var(--accent)" } : undefined}
+                        onClick={() => toggleRead(h.turn, displayProse(h))}
+                        title={readingTurn === h.turn ? "stop reading" : "read aloud (system voice)"}>
+                        {readingTurn === h.turn ? <VolumeX size={12} /> : <Volume2 size={12} />}
+                        {readingTurn === h.turn ? "stop" : "read"}
+                      </button>
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+              {(h.shifts?.length || h.offscreen.length) ? (
+                <details className="shifts my-3 pl-3 border-l" style={{ borderColor: "var(--line)" }}>
+                  <summary className="font-mono text-[10px] uppercase tracking-widest py-0.5 flex items-center gap-2" style={{ color: "var(--text-lo)" }}>
+                    <span>◆ what shifted</span>
+                    <span className="flex items-center gap-1.5 normal-case tracking-normal" style={{ color: "var(--text-mid)" }}>
+                      <AnalogClock label={h.time_label} /> {h.time_label.match(/\d{1,2}:\d{2}/)?.[0] ?? ""}
+                      <WeatherIcon weather={h.weather} />
+                    </span>
+                    {h.turn === history[history.length - 1].turn && !h.illustration_url && (
+                      <button className="ml-auto flex items-center" style={{ color: illustrating ? "var(--accent)" : "var(--text-lo)" }}
+                        title={illustrating ? "painting…" : "illustrate this moment"}
+                        onClick={(e) => { e.preventDefault(); illustrateLatest(); }}>
+                        <ImageIcon size={13} className={illustrating ? "shimmer" : undefined} />
+                      </button>
+                    )}
+                  </summary>
+                  <div className="pt-1 space-y-0.5">
+                    {h.directive && (
+                      <div className="font-mono text-[10px] leading-relaxed pb-1.5 whitespace-pre-wrap" style={{ color: "var(--text-lo)" }}>
+                        <span style={{ color: "var(--accent)" }}>DIRECTION GIVEN → </span>{h.directive}
+                      </div>
+                    )}
+                    {/* asLine, not the value: both arrays are typed string[] and both can be
+                        written by a model. One returned its world-motion lines as objects, React
+                        refused to render them, and the save then threw on every load — a whole
+                        story unreachable because one turn recorded the wrong shape. Nothing the
+                        narrator or the bookkeeper can emit is worth losing a save over. */}
+                    {(h.shifts ?? []).map((s, i) => <div key={`s${i}`} className="shift-line">{asLine(s)}</div>)}
+                    {(h.offscreen ?? []).map((o, i) => (
+                      <div key={`o${i}`} className="font-mono text-[11px] leading-relaxed" style={{ color: "var(--text-lo)" }}>✧ {asLine(o)}</div>
+                    ))}
+                  </div>
+                </details>
+              ) : null}
+            </div>
+          ))}
+          {/* your in-flight words — the bubble anchors the top of the incoming response so you
+              read from your own line down, never hunting for where the turn began */}
+          {liveAction && <div className="player-echo latest live">{liveAction}</div>}
+          {liveProse && liveProse.split(/\n{2,}/).map((p, i, arr) => renderParagraph(p, `live-${i}`, i === arr.length - 1))}
+          <AnimatePresence>
+            {!running && !liveProse && deltas.length > 0 && (
+              <motion.div
+                className="ledger-card"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.35 }}
+              >
+                {deltas.map((r, i) => (
+                  <motion.div
+                    key={r.key}
+                    className="ledger-row"
+                    initial={{ opacity: 0, x: -6 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: reducedMotion() ? 0 : i * 0.07 }}
+                  >
+                    <span className="ledger-text">{r.text}</span>
+                    {r.from !== undefined && r.to !== undefined && (
+                      <span className="ledger-delta">
+                        {r.icon === "clock" ? (
+                          <AnimNumber value={r.to} format={(v) => {
+                            const m = Math.round(v), h = Math.floor(m / 60), mm = m % 60;
+                            return h ? `${h}h${mm ? ` ${mm}m` : ""}` : `${m}m`;
+                          }} good />
+                        ) : (
+                          <>
+                            <AnimNumber value={r.from} />
+                            <span className="ledger-arrow"> → </span>
+                            <AnimNumber value={r.to} good={r.good} />
+                          </>
+                        )}
+                      </span>
+                    )}
+                  </motion.div>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        <AnimatePresence>
+          {reads.length > 0 && !liveProse && (
+            <motion.div key="reads" className="py-2 space-y-2"
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: .25 } }}>
+              {reads.map((r, i) => (
+                <motion.div key={r.faculty + i} className="flex gap-2 items-baseline"
+                  initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.55, duration: .4 }}>
+                  <span className="font-mono text-[10px] uppercase tracking-widest shrink-0 pt-[2px]"
+                    style={{ color: "var(--accent)" }}>{r.faculty}</span>
+                  <span className="text-[14px] leading-snug" style={{ color: "var(--muted)" }}>{r.line}</span>
+                </motion.div>
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {phase && (
+            <motion.div key={phase} className="font-mono text-[11px] uppercase tracking-widest py-2 flex items-center gap-3"
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+              <span className="shimmer">{cancelling ? "stopping" : phase === "narrator" && ground ? "narrator · searching the web" : PHASE_LABEL[phase] ?? phase}…</span>
+              {/* STOP — reachable the whole time the two long calls are running. Nothing is written
+                  until consequences apply, so this genuinely throws the turn away. */}
+              {canStop && (
+                <button className="chip shrink-0" onClick={doStop} disabled={cancelling}
+                  title="stop the narrator or the bookkeeper — nothing is recorded and your words come back"
+                  aria-label="stop this turn">
+                  <Square size={9} style={{ fill: "currentColor" }} /> {cancelling ? "stopping" : "stop"}
+                </button>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {error && (
+          <div className="card p-3 my-3 font-mono text-[12px]" style={{ color: "var(--danger)", borderColor: "rgba(207,90,78,.4)" }}>
+            {error}
+          </div>
+        )}
+        </div>
+      </div>
+
+      {/* WHAT IS OPEN, ON DEMAND. The focus phase and anything coming due were two permanent
+          strips of text between the prose and the composer. They are on the rail above as an icon
+          each now, and this is what those icons open — same information, none of the page. */}
+      {railPanel && (
+        <div className="px-4 pb-1.5">
+          <div className="card p-2.5">
+            {railPanel === "focus" && save.world.focus && (
+              <div className="flex items-center gap-2">
+                <Crosshair size={13} style={{ color: "var(--accent)" }} className="shrink-0" />
+                <span className="text-[12px] truncate flex-1" style={{ color: "var(--text-mid)" }}>
+                  {save.world.focus.mode === "active" ? "in:" : "converging on:"} {save.world.focus.label}
+                </span>
+                <button onClick={async () => { setRailPanel(null); setSave(await api.setFocus(save.id, null)); }}
+                  className="shrink-0" title="release focus">
+                  <X size={14} style={{ color: "var(--text-lo)" }} />
+                </button>
+              </div>
+            )}
+            {railPanel === "soon" && (
+              <div className="flex flex-col gap-1">
+                {soon.map((d) => (
+                  <div key={d.key} className="duesoon-row">
+                    <span className="duesoon-when" style={{ color: d.severity === "major" ? "var(--danger)" : "var(--text-lo)" }}>
+                      {dueLabel(d.hours)}
+                    </span>
+                    <span className="duesoon-text">{d.text}</span>
+                    {d.mine && <span className="duesoon-mine">yours</span>}
+                  </div>
+                ))}
+              </div>
+            )}
+            {railPanel === "body" && (() => {
+              const c = save.condition["char_player"];
+              if (!c) return null;
+              const cl = (n: number) => Math.max(0, Math.min(1, n));
+              return (
+                <div className="flex items-center gap-3">
+                  <Utensils size={12} style={{ color: "var(--text-lo)" }} className="shrink-0" />
+                  <div className="flex-1"><Vitals vitals={[
+                    { key: "fed", label: "", v: cl(1 - (c.hunger_meter ?? 2) / 10), note: `hunger: ${c.hunger}` },
+                    { key: "water", label: "", v: cl(1 - (c.thirst_meter ?? 2) / 10), note: "thirst" },
+                    { key: "rest", label: "", v: cl(1 - (c.awake_minutes ?? 0) / 1080), note: `${Math.round((c.awake_minutes ?? 0) / 60)}h awake` },
+                  ]} /></div>
+                  <Moon size={12} style={{ color: "var(--text-lo)" }} className="shrink-0" />
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
+      {/* composer — one row. The "+" summons mode / web / tightness when you want them. */}
+      <div className="px-3 pb-2 pt-1">
+        <AnimatePresence>
+          {extrasOpen && (
+            <motion.div style={{ overflow: "hidden" }}
+              initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}>
+              <div className="flex items-center flex-wrap gap-x-2 gap-y-1.5 pb-2">
+                <div className="seg" style={{ width: 128 }}>
+                  {MODES.map((m) => (
+                    <button key={m.id} className={mode === m.id ? "on" : undefined}
+                      onClick={() => setMode(m.id)}>{m.label}</button>
+                  ))}
+                </div>
+                <button
+                  className={ground ? "chip chip-accent" : "chip"}
+                  title="Ground this reply with a live web search (real places/facts). Costs more for this turn."
+                  onClick={() => {
+                    const n = !ground; setGround(n);
+                    pushToasts([n ? "web grounding on — turns will search the live web (costs a little more)" : "web grounding off"]);
+                  }}>
+                  <Globe size={10} /> web
+                </button>
+                <span className="flex-1" />
+                {/* SOMATIC TIGHTNESS — one-tap body reading vs your meditative zero. Off = the engine
+                    infers from your text. `base` reroutes the tap to a persistent baseline (bad sleep
+                    the clock can't see) that holds until cleared; otherwise it's a this-turn spike
+                    that clears on send.
+
+                    THE WHOLE SCALE IS ONE OBJECT. These eight controls were direct children of the
+                    wrapping row, so at phone width the row broke wherever it ran out of space — which
+                    on a 420px screen is between 3 and 4, leaving "4 5 base" stranded on a line of
+                    their own under a label that no longer pointed at them. A 0-to-5 scale that wraps
+                    mid-scale is not a scale. They share a nowrap group now and move as one. */}
+                <div className="flex items-center gap-1 shrink-0" style={{ flexWrap: "nowrap" }}>
+                <span className="font-mono text-[8px] uppercase tracking-widest shrink-0" style={{ color: "var(--text-lo)" }} title="how tight your body is right now, 0 (fully calm) to 5 (fully tightened), against your own baseline. leave off to let the engine read it from your words.">
+                  tight
+                </span>
+                {[0, 1, 2, 3, 4, 5].map((n) => {
+                  const active = baseline
+                    ? (() => { const sc = (save as any).condition?.char_player?.subjective_ceiling;
+                        const cur = sc === undefined ? undefined : sc >= 3 ? 2 : sc >= 0 ? 3 : sc >= -3 ? 4 : 5;
+                        return cur === n; })()
+                    : tightness === n;
+                  return (
+                    <button key={n}
+                      className="font-mono text-[11px] leading-none rounded-full flex items-center justify-center shrink-0"
+                      style={{ width: 24, height: 24,
+                        color: active ? "var(--ink-0)" : "var(--text-lo)",
+                        background: active ? "var(--accent)" : "var(--accent-soft)",
+                        border: active ? "1px solid var(--accent)" : "1px solid transparent" }}
+                      title={["fully calm", "neutral", "curious / focused", "tight — and I know it", "tight — without noticing", "fully tightened"][n] + (baseline ? " (baseline — holds until cleared)" : " (this turn)")}
+                      onClick={async () => {
+                        if (baseline) { setSave(await api.setBaselineTightness(save.id, n)); }
+                        else { setTightness((v) => v === n ? undefined : n); }
+                      }}>{n}</button>
+                  );
+                })}
+                <button
+                  className="font-mono text-[8px] uppercase tracking-wider px-1.5 rounded shrink-0"
+                  style={baseline ? { color: "var(--accent)", background: "var(--accent-soft)", minHeight: 26 } : { color: "var(--text-lo)", minHeight: 26 }}
+                  title="baseline mode: the number sets a persistent 'running low today' ceiling (e.g. bad sleep) that holds across turns, instead of a one-turn spike. tap a number in this mode to set it; tap 0/1 to clear."
+                  onClick={() => setBaseline((v) => !v)}>
+                  base
+                </button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+        <div className="flex items-end gap-2">
+          <div className="flex flex-col items-center gap-1">
+            {echoes.length > 0 && (
+              <>
+                <button className="icon-btn echo-nav" onClick={() => jumpToEcho(-1)}
+                  disabled={echoNav === 0}
+                  aria-label="jump to your last message, then earlier ones" title="jump to your last message, then earlier ones">
+                  <ChevronUp size={13} />
+                </button>
+                <button className="icon-btn echo-nav" onClick={() => jumpToEcho(1)}
+                  disabled={echoNav === null}
+                  aria-label="jump to your next message, then back to the bottom" title="jump to your next message, then back to the bottom">
+                  <ChevronDown size={13} />
+                </button>
+              </>
+            )}
+            <motion.button className="icon-btn" style={{ height: 44, width: 40, padding: 0, border: "1px solid var(--line)" }}
+              animate={{ rotate: extrasOpen ? 45 : 0 }} transition={{ duration: 0.18 }}
+              onClick={() => setExtrasOpen((v) => !v)} data-tour="play-extras"
+              aria-label="compose options — mode, web grounding, body tightness" title="compose options — mode, web grounding, body tightness">
+              <Plus size={16} />
+            </motion.button>
+          </div>
+          <textarea
+            className="field flex-1"
+            data-tour="play-composer"
+            rows={focused || action.includes("\n") || action.length > 60 ? 3 : 1}
+            style={{ transition: "height .18s ease", padding: focused ? undefined : "11px 14px" }}
+            placeholder=""
+            value={action}
+            enterKeyHint="send"
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
+            onChange={(e) => setAction(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); }
+            }}
+          />
+          <motion.button className="btn btn-accent" style={{ height: 44, width: 46, padding: 0 }} data-tour="play-send"
+            whileTap={{ scale: 0.92 }} onClick={submit} disabled={(running && !proseDone) || !action.trim() || hasPending}
+            aria-label="send">
+            <CornerDownLeft size={16} />
+          </motion.button>
+        </div>
+      </div>
+
+      {/* THE "⋯" SHEET — every option you only need occasionally, in one calm list.
+          The play surface stays prose; the machinery lives here. */}
+      <AnimatePresence>
+        {menuOpen && (
+          <>
+            <motion.div className="drawer-veil fixed inset-0 z-40"
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={() => setMenuOpen(false)} />
+            <motion.div className="drawer fixed bottom-0 left-0 right-0 z-50 px-3"
+              initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
+              transition={{ type: "spring", stiffness: 380, damping: 38 }}>
+              <div className="grab" />
+
+              <div className="sheet-cap">the story</div>
+              <button className="sheet-item" disabled={running} onClick={() => { setMenuOpen(false); runObserve(); }}>
+                <span className="sheet-ic"><PlayIcon size={15} /></span>
+                <span className="flex-1 min-w-0">
+                  <span className="sheet-label block">Watch a turn</span>
+                  <span className="sheet-hint block">the world and your character act on their own</span>
+                </span>
+              </button>
+              <button className="sheet-item" onClick={() => { setMenuOpen(false); setTone(); }}>
+                <span className={save.world_bible.tone ? "sheet-ic lit" : "sheet-ic"}><Feather size={15} /></span>
+                <span className="flex-1 min-w-0">
+                  <span className="sheet-label block">Genre & register</span>
+                  <span className="sheet-hint block truncate">
+                    {save.world_bible.tone ? `set — ${save.world_bible.tone}` : "the key the whole story is written in"}
+                  </span>
+                </span>
+              </button>
+              <button className="sheet-item" onClick={() => { setMenuOpen(false); setNarratorDirection(); }}>
+                <span className={save.world_bible.narrator_direction ? "sheet-ic lit" : "sheet-ic"}><Compass size={15} /></span>
+                <span className="flex-1 min-w-0">
+                  <span className="sheet-label block">Narrator direction</span>
+                  <span className="sheet-hint block truncate">
+                    {save.world_bible.narrator_direction ? `set — ${save.world_bible.narrator_direction}` : "standing orders for how the story is told"}
+                  </span>
+                </span>
+              </button>
+              {save.world.focus ? (
+                <button className="sheet-item" onClick={async () => { setMenuOpen(false); setSave(await api.setFocus(save.id, null)); }}>
+                  <span className="sheet-ic lit"><Crosshair size={15} /></span>
+                  <span className="flex-1 min-w-0">
+                    <span className="sheet-label block">Release focus</span>
+                    <span className="sheet-hint block truncate">{save.world.focus.label}</span>
+                  </span>
+                </button>
+              ) : (
+                <button className="sheet-item" onClick={() => { setMenuOpen(false); setFocusPrompt(); }}>
+                  <span className="sheet-ic"><Crosshair size={15} /></span>
+                  <span className="flex-1 min-w-0">
+                    <span className="sheet-label block">Drive toward an event</span>
+                    <span className="sheet-hint block">the story builds toward it, then shifts into it</span>
+                  </span>
+                </button>
+              )}
+              <button className="sheet-item" disabled={illustrating || !history.length}
+                onClick={() => { setMenuOpen(false); illustrateLatest(); }}>
+                <span className={illustrating ? "sheet-ic lit" : "sheet-ic"}><ImageIcon size={15} /></span>
+                <span className="flex-1 min-w-0">
+                  <span className="sheet-label block">{illustrating ? "Painting…" : "Illustrate the latest turn"}</span>
+                  <span className="sheet-hint block">a scene image, painted from the prose</span>
+                </span>
+              </button>
+
+              <div className="sheet-rule" />
+              <div className="sheet-cap">time & memory</div>
+              <button className="sheet-item" disabled={running || skipping}
+                onClick={() => { setMenuOpen(false); setSkipOpen(true); }}>
+                <span className="sheet-ic"><Moon size={15} /></span>
+                <span className="flex-1 min-w-0">
+                  <span className="sheet-label block">Let the world turn</span>
+                  <span className="sheet-hint block">skip hours or days — or direct a montage</span>
+                </span>
+              </button>
+              <button className="sheet-item" disabled={!save.snapshot_turns.length}
+                onClick={() => { setMenuOpen(false); setRollbackOpen(true); }}>
+                <span className="sheet-ic"><RotateCcw size={15} /></span>
+                <span className="flex-1 min-w-0">
+                  <span className="sheet-label block">Roll back</span>
+                  <span className="sheet-hint block">turn {save.world.current_turn} · return to an earlier snapshot</span>
+                </span>
+              </button>
+              {undoTurn !== null && (
+                <button className="sheet-item" onClick={() => { setMenuOpen(false); doUndoRollback(); }}>
+                  <span className="sheet-ic lit"><RotateCcw size={15} style={{ transform: "scaleX(-1)" }} /></span>
+                  <span className="flex-1 min-w-0">
+                    <span className="sheet-label block" style={{ color: "var(--accent)" }}>Undo rollback</span>
+                    <span className="sheet-hint block">return to turn {undoTurn}</span>
+                  </span>
+                </button>
+              )}
+              <button className="sheet-item" disabled={running} onClick={() => { setMenuOpen(false); clearLog(); }}>
+                <span className={save.world.context_from_turn ? "sheet-ic lit" : "sheet-ic"}><Eraser size={15} /></span>
+                <span className="flex-1 min-w-0">
+                  <span className="sheet-label block">{save.world.context_from_turn ? "Restore the log" : "Clear the log"}</span>
+                  <span className="sheet-hint block">
+                    {save.world.context_from_turn
+                      ? `the narrator is reading from turn ${save.world.context_from_turn} — tap to let it see everything again`
+                      : "the narrator stops reading earlier turns — nothing is deleted, the story stays on the page"}
+                  </span>
+                </span>
+              </button>
+              <button className="sheet-item" disabled={running || chaptering}
+                onClick={() => { setMenuOpen(false); refreshMemory(); }}>
+                <span className="sheet-ic"><BookOpen size={15} /></span>
+                <span className="flex-1 min-w-0">
+                  <span className="sheet-label block">{chaptering ? "Refreshing…" : "Refresh memory"}</span>
+                  <span className="sheet-hint block">condense memory drift, clear runaway threads — same moment, same people</span>
+                </span>
+              </button>
+
+              <div className="sheet-rule" />
+              <div className="sheet-cap">feel</div>
+              <button className="sheet-item" onClick={cycleAmbience}>
+                <span className={ambience === "full" ? "sheet-ic lit" : "sheet-ic"}><Sparkles size={15} /></span>
+                <span className="flex-1 min-w-0">
+                  <span className="sheet-label block">Ambience — {ambience}</span>
+                  <span className="sheet-hint block">tap to cycle subtle / full / off</span>
+                </span>
+              </button>
+
+              {/* the session meter, demoted from a permanent line to a footer readout */}
+              <div className="font-mono text-[9.5px] uppercase tracking-wider flex items-center gap-2 px-2.5 pt-3 pb-2"
+                style={{ color: "var(--text-lo)", opacity: 0.85 }}>
+                <span>
+                  {spend.cost > 0 || spend.aux.cost > 0
+                    ? `$${(spend.cost + spend.aux.cost).toFixed(2)} · ${spend.hit}% cached`
+                      + (spend.aux.images > 0 ? ` · ${spend.aux.images} img` : "")
+                      + (spend.aux.montage_calls > 0 ? ` · ${spend.aux.montage_calls} montage` : "")
+                    : "no spend yet"}
+                </span>
+                {spend.gov.budget > 0 && spend.gov.eco && (
+                  <span className="flex items-center gap-1" style={{ color: "var(--accent)" }}><Leaf size={9} /> eco</span>
+                )}
+                {save.model_settings.lean_mode && <span>· lean</span>}
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* DE-style name tooltip */}
+      <AnimatePresence>
+        {tip && tipChar && (
+          <>
+            <div className="tip-veil" onClick={() => setTip(null)} />
+            <motion.div className="tip-card"
+              style={{ left: Math.min(tip.x, window.innerWidth - 316), top: Math.min(tip.y + 8, window.innerHeight - 220) }}
+              initial={{ opacity: 0, scale: 0.92, y: -4 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95 }} transition={{ duration: 0.18, ease: [0.2, 0.9, 0.3, 1.2] }}>
+              <div className="flex gap-3">
+                {tipChar.portrait_url && <img src={tipChar.portrait_url} alt="" className="w-12 h-12 rounded-lg object-cover shrink-0" style={{ border: "1px solid var(--line-strong)" }} />}
+                <div className="min-w-0">
+                  <div className="tip-kicker">{tipPsy ? `${tipPsy.mood} · ${tipPsy.state}` : "presence"}</div>
+                  <div className="font-display text-[16px]">{tipChar.name}</div>
+                </div>
+              </div>
+              {tipEdge && (
+                <div className="font-mono text-[10.5px] mt-2" style={{ color: tipEdge.warmth >= 0 ? "var(--calm)" : "var(--danger)" }}>
+                  {tipEdge.warmth >= 20 ? "warm toward you" : tipEdge.warmth <= -20 ? "cold toward you" : "unresolved about you"} · trust {tipEdge.trust}
+                  {tipEdge.notes ? <span style={{ color: "var(--text-lo)" }}> — {tipEdge.notes}</span> : null}
+                </div>
+              )}
+              {tipBelief && (tipBelief.held_false || tipDivergence > 20 || tipBelief.surprise > 0.4) && (
+                <div className="mt-2 pl-2.5 py-1.5 rounded" style={{ borderLeft: "2px solid var(--accent-glow)", background: "var(--accent-soft)" }}>
+                  <div className="font-mono text-[8.5px] uppercase tracking-wider" style={{ color: "var(--accent)" }}>their read of you {tipDivergence > 20 ? "· off the mark" : ""}</div>
+                  <div className="text-[11.5px] mt-0.5 leading-snug" style={{ color: "var(--text-mid)" }}>
+                    {tipBelief.held_false
+                      ? `Wrongly ${tipBelief.held_false.replace(/^is /, "").replace(/^can't/, "can't")}.`
+                      : tipBelief.predicted_stance === "ally" ? "Reads you as an ally."
+                      : tipBelief.predicted_stance === "rival" ? "Reads you as a threat."
+                      : "Can't place you yet."}
+                    {tipBelief.surprise > 0.4 ? " Freshly thrown by something you did." : ""}
+                  </div>
+                </div>
+              )}
+              {tipMem && (
+                <div className="text-[12px] italic mt-2 leading-relaxed" style={{ color: "var(--text-mid)" }}>
+                  Last carried: “{tipMem.content}”
+                </div>
+              )}
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* montage scorecard — what the run landed, and what it missed */}
+      <AnimatePresence>
+        {scorecard && scorecard.length > 0 && (
+          <motion.div className="fixed left-0 right-0 z-40 px-5"
+            style={{ bottom: 96 }}
+            initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }}>
+            <div className="card p-3">
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="font-mono text-[10px] uppercase tracking-widest" style={{ color: "var(--text-lo)" }}>
+                  montage scorecard
+                </div>
+                <button className="font-mono text-[10px] uppercase tracking-widest"
+                  style={{ color: "var(--text-lo)" }} onClick={() => setScorecard(null)}>close</button>
+              </div>
+              {scorecard.map((r, i) => (
+                <div key={i} className="flex items-baseline gap-2 text-[12px] leading-relaxed">
+                  <span style={{ color: r.landed ? "var(--calm)" : "var(--danger)" }}>{r.landed ? "✓" : "○"}</span>
+                  <span style={{ color: r.landed ? "var(--text-mid)" : "var(--text-lo)" }}>{r.item}</span>
+                </div>
+              ))}
+              {scorecard.some((r) => !r.landed) && (
+                <div className="text-[11px] mt-1.5" style={{ color: "var(--text-lo)" }}>
+                  Unlanded items didn't happen in the story. Run another short montage aimed at just those, or play them out.
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* skip drawer — let the world turn */}
+      <AnimatePresence>
+        {skipOpen && (
+          <>
+            <motion.div className="drawer-veil fixed inset-0 z-40"
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={() => setSkipOpen(false)} />
+            <motion.div className="drawer fixed bottom-0 left-0 right-0 z-50 px-5"
+              initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
+              transition={{ type: "spring", stiffness: 380, damping: 38 }}>
+              <div className="grab" />
+              <div className="py-2">
+                <div className="font-display text-[16px]">Let the world turn.</div>
+                <div className="text-[12.5px] mt-0.5" style={{ color: "var(--text-mid)" }}>
+                  Step away. Drives advance, rumors saturate, clocks fill and fire, bodies heal. You return to whatever it became.
+                </div>
+              </div>
+              {!montageMode ? (
+                <>
+                  <div className="pb-3 grid grid-cols-2 gap-2">
+                    {[["Overnight", 1], ["Three days", 3], ["A week", 7], ["A fortnight", 14]].map(([label, d]) => (
+                      <button key={d} className="card card-press p-3.5 text-left" onClick={() => doSkip(d as number)}>
+                        <div className="font-display text-[14px]">{label}</div>
+                        <div className="font-mono text-[9.5px] mt-0.5" style={{ color: "var(--text-lo)" }}>{d}d · 1 small call</div>
+                      </button>
+                    ))}
+                  </div>
+                  <button className="card card-press p-3.5 text-left w-full mb-5"
+                    onClick={() => { setMontageMode(true); setMWarnings([]); }}>
+                    <div className="font-display text-[14px]">Direct the montage…</div>
+                    <div className="text-[11.5px] mt-0.5" style={{ color: "var(--text-mid)" }}>
+                      Say what should be true by the end. The engine writes the middle in beats — the decision, the friction, the settling.
+                    </div>
+                  </button>
+                </>
+              ) : (
+                <div className="pb-5">
+                  <textarea className="composer-input w-full mb-2" rows={3}
+                    placeholder="thirty days — we move in together, fall deeper, adopt two cats, argue about tacos"
+                    value={mDirection}
+                    onChange={(e) => { setMDirection(e.target.value); setMWarnings([]); }}
+                    onBlur={async () => {
+                      if (!mDirection.trim()) return;
+                      try { setMWarnings(await api.montagePreflight(save.id, mDirection.trim(), mDays)); } catch {}
+                    }} />
+                  {mWarnings.map((w, i) => (
+                    <div key={i} className="text-[11.5px] mb-1.5 px-2.5 py-1.5 rounded-lg"
+                      style={{ background: "var(--ink-2)", color: "var(--text-mid)" }}>⚠ {w}</div>
+                  ))}
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="font-mono text-[10px] uppercase tracking-widest" style={{ color: "var(--text-lo)" }}>days</span>
+                    <input type="range" min={3} max={120} value={mDays} className="flex-1"
+                      onChange={(e) => setMDays(Number(e.target.value))}
+                      onPointerUp={async () => {
+                        if (!mDirection.trim()) return;
+                        try { setMWarnings(await api.montagePreflight(save.id, mDirection.trim(), mDays)); } catch {}
+                      }} />
+                    <span className="font-mono text-[12px]" style={{ minWidth: 34, textAlign: "right" }}>{mDays}</span>
+                  </div>
+                  <div className="flex gap-1.5 mb-3">
+                    {(["quick", "standard", "full"] as const).map((g) => (
+                      <button key={g} className={g === mGran ? "chip chip-accent" : "chip"}
+                        onClick={() => setMGran(g)}>{g}</button>
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <button className="chip" onClick={() => setMontageMode(false)}>back</button>
+                    <button className="chip chip-accent flex-1" disabled={!mDirection.trim()}
+                      onClick={doMontage}>run the montage</button>
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* rollback drawer */}
+      <AnimatePresence>
+        {rollbackOpen && (
+          <>
+            <motion.div className="drawer-veil fixed inset-0 z-40"
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={() => { setRollbackOpen(false); setArmedRollback(null); }} />
+            <motion.div className="drawer fixed bottom-0 left-0 right-0 z-50 px-5"
+              initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
+              transition={{ type: "spring", stiffness: 380, damping: 38 }}>
+              <div className="grab" />
+              <div className="flex items-center justify-between py-2">
+                <div className="font-display text-[16px]">Roll back to…</div>
+                <button onClick={() => setRollbackOpen(false)}><X size={18} style={{ color: "var(--text-lo)" }} /></button>
+              </div>
+              <div className="pb-4 space-y-2">
+                {undoTurn !== null && (
+                  <button className="card card-press w-full p-3.5 text-left flex justify-between items-center"
+                    style={{ borderColor: "var(--accent-glow)" }}
+                    onClick={() => { setRollbackOpen(false); doUndoRollback(); }}>
+                    <span className="font-display text-[14px]" style={{ color: "var(--accent)" }}>⟳ Undo last rollback</span>
+                    <span className="font-mono text-[10px]" style={{ color: "var(--text-lo)" }}>return to turn {undoTurn}</span>
+                  </button>
+                )}
+                {[...save.snapshot_turns].reverse().filter((t) => t !== 1).map((t) => (
+                  // Snapshot t holds the state BEFORE turn t ran, so restoring it lands at the end
+                  // of turn t-1 — the label shows the landing point, not the snapshot's own number.
+                  <button key={t} className="card card-press w-full p-3.5 text-left flex justify-between items-center"
+                    style={armedRollback === t ? { borderColor: "var(--danger)" } : undefined}
+                    onClick={() => doRollback(t)}>
+                    <span className="font-display text-[14px]" style={armedRollback === t ? { color: "var(--danger)" } : undefined}>
+                      {armedRollback === t ? `Erases ${save.world.current_turn - t} turns — tap again` : `Turn ${t - 1}`}
+                    </span>
+                    <span className="font-mono text-[10px]" style={{ color: "var(--text-lo)" }}>
+                      {save.history.find((h) => h.turn === t - 1)?.time_label ?? ""}
+                    </span>
+                  </button>
+                ))}
+                {save.snapshot_turns.includes(1) && (
+                  <button className="w-full p-2.5 text-left flex justify-between items-center rounded-xl"
+                    style={{ border: `1px dashed ${armedRollback === 1 ? "var(--danger)" : "var(--ink-3)"}`, opacity: 0.85 }}
+                    onClick={() => doRollback(1)}>
+                    <span className="font-mono text-[11px]" style={{ color: armedRollback === 1 ? "var(--danger)" : "var(--text-lo)" }}>
+                      {armedRollback === 1 ? `⟲ ERASES ALL ${save.world.current_turn - 1} TURNS — tap again to confirm` : "⟲ the very beginning (erases the whole story)"}
+                    </span>
+                  </button>
+                )}
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* THE CHARACTER SLIDE-OVER — tap a face on the status rail and their full card comes in
+          from the side, so "who is this and how do they feel about me" never leaves the scene.
+
+          It used to claim to be three drawers. The World and Chronicle branches were real code with
+          a real veil, a real header and a real mount — and nothing in this file ever set `drawer` to
+          either value, so neither had ever opened for anybody. They are gone rather than wired up:
+          both views own a tab on the bottom bar already, and inventing a second way in is a feature,
+          not a repair. */}
+      <AnimatePresence>
+        {drawer && (
+          <>
+            <motion.div className="drawer-veil fixed inset-0 z-40"
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={() => setDrawer(null)} />
+            <motion.div className="fixed inset-y-0 right-0 z-50 flex flex-col"
+              style={{ width: "min(560px, 94vw)", background: "var(--ink-0)", borderLeft: "1px solid var(--line-strong)", boxShadow: "-24px 0 60px rgba(0,0,0,.45)" }}
+              initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }}
+              transition={{ type: "spring", stiffness: 360, damping: 40 }}>
+              <div className="flex items-center justify-between px-4 py-2" style={{ borderBottom: "1px solid var(--ink-2)" }}>
+                <div className="font-mono text-[10px] uppercase tracking-widest" style={{ color: "var(--text-lo)" }}>
+                  cast
+                </div>
+                <button onClick={() => setDrawer(null)}><X size={16} style={{ color: "var(--text-lo)" }} /></button>
+              </div>
+              <div className="flex-1 min-h-0">
+                <Cast key={drawerSel ?? "none"} save={save} setSave={setSave} initialSel={drawerSel} />
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {lightbox && (
+        <div onClick={() => setLightbox(null)}
+          style={{ position: "fixed", inset: 0, zIndex: 100, background: "rgba(0,0,0,0.92)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <img src={lightbox} alt="" style={{ maxWidth: "100%", maxHeight: "100%", borderRadius: 12, objectFit: "contain" }} />
+        </div>
+      )}
+    </div>
+  );
+}

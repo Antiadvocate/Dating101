@@ -1,0 +1,174 @@
+# How people work in Weft
+
+One page, plain language. Every mechanic below is deterministic code unless marked (LLM).
+
+## The kernel: relaxation
+
+Every character has one number for the state of their body: **relaxation**, −10 (clenched) to +10 (open). Everything else hangs off it. Each body has its own **resting point** (capacity) and its own **recovery speed** — some people return to calm fast, some sit braced for days. The number drifts toward the resting point every turn; events (via the simulator) shove it around.
+
+## Seeing: the perception gate
+
+Relaxation sets how accurately a person reads other people. Clenched bodies see poorly and are certain anyway — neutral faces read as threats. Open bodies see people as they actually are. This is rendered as an instruction per character per turn, so the narrator writes misreading, not just mood.
+
+**Exception — conscience.** Calm is not care. Each person has a **conscience** number (0–1): how much other people's pain registers as mattering. For most people, opening up and warming up travel together. For a person at ≤0.3, they come apart: relaxation still sharpens their sight, but what they see never obligates them. Their calm is real (these people are genuinely low-anxiety and stress-immune) and it makes them more effective, not kinder. Clench makes them petty and punitive instead of defensive. Their darkness is constitution, not wound, and comfort does not fix it.
+
+## Places: the room got there first
+
+A place is not neutral to the person walking into it. What a room holds for someone is what happened to them in it — and walking in gets some of it, before anybody has said a word. You are already braced by the time you notice the hallway.
+
+It is small, it fires on arrival rather than every turn you stand there, and it **habituates**: the kitchen you use every day stops doing this to you, and the house you have avoided for a month does not. It is also personal — the same room is charged for one of two people standing in it and inert for the other, because it is computed from each person's own memory of the place. That is the whole point of it.
+
+## Everybody is simulated; not everybody is described
+
+A background character — a vendor, a clerk, someone's cousin — used to be excluded from the emotion lifecycle, from release, from desire, from repair. Not to save anything: all of that is arithmetic over numbers already in the save. What costs is the *description* in the prompt, and a background character is one line either way.
+
+So the two questions are separate now. Everyone gets a nervous system, always, for free. Only the central cast gets described in detail. A vendor with an inner life costs exactly what a vendor without one costs — and when a scene finally turns toward them, they are somebody, rather than furniture that has been standing at its resting point since the turn it was named.
+
+The world moving offstage reaches bodies too. Something hard that happened to a person while nobody was watching lands on them; someone who only saw it takes half. The story used to move without the people in it moving.
+
+## Wear: what a long story does to a body
+
+The resting point is not a constant. A person who spends a long stretch braced comes to rest tighter than they used to — ordinary friction stops landing on them, and there is less in reserve when something real arrives. A person held and safe for a long stretch comes to rest easier, with more room before they contract. Neither happens in an afternoon: it takes a run, and a single bad day changes nobody.
+
+Two things keep this from becoming a one-way trip into numbness, which is what it would otherwise be, because bracing makes more bracing likely. The first is that a body is always being drawn back toward the one it was born with — slowly, underneath everything, whether or not anything good is happening. Sixty turns of hell followed by a hundred turns in which *nothing happens at all* brings someone most of the way home. The second is that coming back is a little easier than going down. Both are deliberate: a story where damage is permanent and recovery has to be earned by a scene is a story that has decided something false about people.
+
+Numbness is real and it is bounded. A worn body stops flinching at the daily grind — the small slights, the ordinary rudeness — but a genuine blow lands at full weight on the most hardened person in any save. Nobody in this engine can become unreachable.
+
+**Never the player.** The engine will not decide that the story has worn you down. Your interior reaches it only when you type it, and your own report of how tight you are can cap what you feel but never lift it. A resting point is a fact about a person, and the player is the one person here whose inside the engine cannot see.
+
+## Attention: the aperture
+
+The same number decides how *wide* a person is. A braced body narrows: the attention goes to the one thing that matters, the vocabulary tightens onto its most concentrated form, and very little else gets in. That is not a fault — it is what bracing is for, and it is what makes the other end mean anything.
+
+An open body is not doing that. Its speech still comes out of its own life and its own words, but the signature loosens: something said for no reason, an aside that goes nowhere, an answer given straight with no angle on it, a sentence that does not end in what happens next. Its attention is catchable by whatever is actually around it — a gym on the way to the bank, a smell in the car, somebody else's shoulder — and none of that has to lead anywhere. And its wants move by an inch and a gesture rather than by an agenda read out loud: a person walking toward what they want while talking about something else is the ordinary case, and a person narrating their want every turn is a plot-label with a body.
+
+A voice card describes the shape a person takes **under load**. Run at a hundred percent it stops being a voice and becomes a filter, and the character can only ever say the one kind of thing. How much of it is load-bearing this turn is what the aperture decides.
+
+## Feeling: the lifecycle of an emotion
+
+An emotion is an event, not a possession. When one lands (an active state like "anger at the verdict"), what happens next depends on the body holding it:
+
+- **Settled body:** after a couple of turns the state dissolves on its own — felt fully, not fed. It leaves its information behind: anger settles into a clear view of what was actually wrong, fear into alertness to what matters, grief into plain love for what was lost, envy into the plain energy to go and do the thing, contempt into seeing the other person standing on the same ground. The charge goes; the knowledge stays.
+- **Clenched body:** the state gets re-told instead of felt. After a few turns it starts feeding on itself — a small ongoing drain on relaxation, because the reaction to the pain has become its own pain. The first hit is the event. The second hit is the story about the event, and the second one is self-inflicted. The oldest fed emotion also colonizes the mood.
+- **Moods are weather:** a mood set turns ago fades once the body settles. Nothing emotional is permanent unless a body keeps it alive.
+
+## Seeing yourself: the two roads
+
+A person's habits fire whether or not they notice. Noticing is what loosens one — not deciding to stop, not replacing it with something better; the pattern simply weakens a little each time it is seen while it happens, and the weakening is never available to the person it happens to. Only somebody who knew the old pattern can ever notice the new absence.
+
+This is the engine's slowest channel and it now runs for every NPC in every save by default. For a long time it did not run at all: it sat behind an experimental toggle, and with the toggle on it still produced nothing, because a habit could only fire if its written form scored high enough on a word-overlap test against the beat — which a trait written as a concrete behaviour ("answers a question with a joke first and the real answer only if you wait her out") can never do. The better a trait was written, the less able it was to ever fire. A pattern does not run because the room said its keyword; it runs because it is a pattern. What decides how readily an unprompted one runs is grip: a braced body does its patterns constantly, a settled one has slack.
+
+Patterns are also **laid down in play**, not only carried in from birth. A trait the story reinforced until it became part of who someone is enters as an automaticity too — but as drywall, not as the wall a person was built with. It loosens the same way and by the same mechanism; there is simply less of it to lose, which is why a thing you have done for a year comes apart faster than the thing you have always done.
+
+There are **two ways the noticing happens**, and for a long time the engine knew only one. The first is ease: a settled body can watch itself. The second is volume — the thing arising so hard it cannot be looked past, in a body with no ease anywhere in it. That road runs *against* the grip, not with it, and it is where most people who ever caught themselves actually caught themselves. A body at the bottom is no longer blind by construction; at full intensity it sees roughly one firing in five.
+
+This matters beyond the mechanic. Gated on calm alone, the engine was quietly asserting that regulated people are the ones who get free, which is both false and the most flattering thing a story can tell a comfortable reader. It also made the best scene in fiction — somebody catching themselves mid-pattern on the worst day of their life — impossible for exactly the people it happens to.
+
+## Wanting: desire as its own channel
+
+**Attraction is separate from warmth** — wanting someone is not liking them. It's seeded from conditioning (each person's *taste*: what their world and history trained them to find desirable) the moment two people share a scene, gated hard by orientation, and it never moves because someone was kind (kindness moves warmth). Sustained warmth can lift attraction slowly, but a flat first read plateaus at fondness-with-a-mild-pull — a different relationship, not passion.
+
+What desire *does* obeys the kernel: a drawn, settled person acts — flirts, teases, approaches. A drawn, clenched person leaks — staring, sharpness, avoidance. Held long enough in a clenched body, wanting hardens into fixation, which drains the body further until the person settles — at which point it lets go on its own. Same energy, two roads, decided by grip.
+
+## Other people: co-regulation and attachment
+
+Nervous systems are not closed. A settled person you trust, present in the room, pulls you toward settled. But *how* a body uses people under threat is a stable per-person trait:
+
+- **secure** — takes the comfort straight; settles near safe people.
+- **anxious** — runs hot toward people: soothed strongly by presence, but scared and alone, the alarm feeds itself (pursue, escalate, re-check).
+- **avoidant** — runs cold: comfort barely lands, and under real threat closeness is pressure — a warm person leaning in does nothing; they settle alone, later.
+- **disorganized** — reaches for the comfort and flinches from it in the same motion; presence helps some turns and stings on others.
+
+When someone is clenched, the narrator gets their under-threat behavior as a line of law — so two scared people in the same scene do visibly different things.
+
+Beyond the pairwise, there is **the room itself**. Bodies lean toward the aggregate state of whoever is present — a weak pull, never an override — and the pull strengthens when the room is lopsided. A unanimous calm holds a frightened stranger; a unanimous bracing sweeps a crowd into panic. This is why a scene can "flip": not because anyone decided, but because the weather hit a threshold.
+
+## Being sure of someone
+
+Each person carries a private model of whoever matters to them, and it can be wrong — that gap is where misreadings come from. But the model can also be *right*, and staying right has a cost the engine used to ignore entirely.
+
+Hold an accurate read of somebody long enough and it stops being a read and becomes a picture. What gets perceived after that is the picture; the person becomes the noise around it. Real change in them arrives attenuated — not disbelieved, just not quite registered, the way you stop hearing a clock — and it takes a much larger event than it used to for anything to get through at all. This is not hostility and not a misunderstanding: it fires hardest on people who are correct about each other, which is the point. Being right about someone is not the same as looking at them.
+
+When something finally does break through, it does not arrive as one turn's news. Everything that went unregistered while the looking was suspended lands at once, the certainty halves, and the person is being seen again. The engine will never let a settled picture *seal* a mind — a mind nothing can reach can't have that turn, and that turn is the whole reason the mechanic exists.
+
+## Breaking
+
+Clenched long enough and deep enough, a person fractures, then breaks — into a break mode (dissociative, fawning, mirror, fractured) with its own rendering rules. Recovery restores them.
+
+## Release: the discharge
+
+Contraction held past capacity does not taper off — it lets go. When a body that was held deep comes all the way back within a turn (the sob, the laugh, the shaking exhale), the engine marks a **discharge**: the oldest gripped emotion completes on the spot, keeping its information and dropping its story; the mood it colonized clears; and for a while the body can rest more open than its nature — a temporary lift that decays over the following turns. An opening, not a personality change. What was held and released leaves a person briefly *more* themselves, not less.
+
+## Becoming: how emotion builds a self
+
+Repeated states become traits (LLM, on the reflection cadence — never per-turn, so a single scene can't move the core). Reflection now also receives the body's recent record: a body that spent the period braced hardens protective, absolute convictions from the same events a settled body would read generously. Belief is shaped by the state it was formed in, not just the facts. Deep-integrated traits fold into core identity; unreinforced ones fade. Memory does the same: experience decays into gist, important gist becomes settled knowledge, and the life-defining residue is permanent.
+
+## News: the rumor field
+
+Rumors live on the social graph the way weather lives on land. News spreads between people in the same place, and the **aggregate body state of each room** sets how fast: dread travels through clenched crowds, warm news through settled ones. Stories sharpen in the telling when they ride matching weather — and they die of boredom when nobody is charged enough to repeat them. The field grows and it reduces; a panic can sweep a town and then be gone from it.
+
+## The short version
+
+Events land as feeling. Grip turns feeling into story, story into suffering, suffering into disposition, disposition into self. Release lets feeling pass and keeps its information — and a deep enough release opens the body past its own nature for a while. Other bodies tilt yours toward grip or release, each in its own style, and whole rooms tilt together. A few people see everything and grip nothing because nothing ever mattered to them but themselves — and they are calm.
+
+*(The machine underneath all of this — the scalar, the thresholds, the pipeline, every decay term — is documented in KERNEL.md.)*
+
+## Prose craft: where the narrator rules come from
+
+The narrator's anti-vagueness rules are not invented here. They use human craft vocabulary, so a language model recognizes the term and the correction it was trained alongside:
+
+- **Filter words** (Janet Burroway, *Writing Fiction*) — *saw, felt, heard, noticed, seemed, realized, watched.* They put a pane of glass between reader and moment. Cut the filter: "the cold seeped into her hands," not "she felt the cold seep in." Prune, don't ban — a filter is right when perception itself is the point ("she heard it before she saw it").
+- **Vague declarative** (anti-slop skill vocabulary) — asserting a reaction without naming it. "Something tightened behind her eyes" is the fiction form. Fix: name the specific reaction or cut to action.
+- **Narrator-from-a-distance** (same source) — pulling the camera out of the scene. Our weather-sting ("Outside, the rain picked up") is this. Fix: put the reader in the room; end on a person.
+- **On-the-nose dialogue / subtext** (editor's craft term) — characters saying exactly what they feel, which flattens voice and reads false. Fix: let the surface line be about the small thing and the real thing sit under it. Trust the gap; don't close it with a confession.
+
+These are *tendencies to prune, not absolutes* — every craft source is emphatic on this, and a human writer exercises judgment the model won't. For a weak narrator model that overuses these moves by default, the prompt draws a harder line than a writer would draw on themselves. That is deliberate: the model needs the floor, not the nuance.
+
+Rules NOT imported, though they appear in the same anti-slop lists, because they are essay rules that break fiction: "no inanimate objects performing human actions" (kills legitimate metaphor — "the fever broke," "grief sat down beside him"), blanket "no em dashes," blanket "no adverbs." Those lists target marketing copy and essays; fiction is a different instrument.
+
+## Earshot
+
+Presence is derived from co-location, and co-location decides who perceives a turn. Two rules follow, and both are enforced in code because the prompt alone never held:
+
+- **Sub-rooms are rooms.** "Tessa's house (kitchen)" and "Tessa's house (outside in the yard)" are not one scene. A sub-room merges only with its bare parent, never with a sibling. Names arrive both dashed ("House - kitchen") and parenthesized; both parse.
+- **Only witnesses learn.** Whoever stood in the room when the player acted — plus anyone the turn moves into the player's place — may gain a memory, a learned fact, an edge shift, a mood change from it. Everyone else gets nothing, no matter what the prose implies. A line spoken alone in the yard cannot be answered from the kitchen, and cannot be remembered there later.
+
+The failure this prevents is quiet and corrosive: a character reacts to something they could not have heard, the player assumes they were overheard, and the world stops being a place with walls.
+
+## The veto
+
+The narrator is a weak model with authority to invent, and the bookkeeper is told the prose is source of truth. That combination means one bad sentence becomes permanent world-fact within a turn, and the next turn builds lore on top of it. The player must be able to say *no* and have it stick.
+
+**Strike** does that. It rolls back past the offending turn and records a standing retcon — a statement of what is NOT and never was — injected into every subsequent narrator and simulator prompt at absolute authority. Struck things are not explained or resolved; they are treated as never written. Characters the strike names are deleted; canon it minted is dropped. Undo restores everything.
+
+Three guards sit under it, because a veto after the fact is a poor substitute for not breaking the world:
+
+- **Canon is a constraint on what may exist**, not a fact sheet. Before anything enters a scene — even a shout through a wall — it is checked against canon. Introducing an exception and then explaining it *is* the violation. If the player says something was impossible, they are almost certainly right.
+- **The prose is not authority to violate canon.** The simulator no longer transcribes "exactly"; it refuses to create, record, or learn from anything canon forbids.
+- **Exits must be written, never inferred.** The simulator can emit `{char_id, place}` with no justification and no cost, and it hallucinates departures: a character speaking in this very turn gets teleported to `elsewhere`, drops from `present`, loses her card, and vanishes. Now a character who is active in the prose cannot be moved out of the scene unless the prose actually says she left.
+
+## Re-running the bookkeeper
+
+Two models write each turn. The narrator produces prose; the bookkeeper turns that prose into world change — memories formed, feelings moved, people relocated. When the bookkeeper returns an empty or dead diff, the turn happened on the page and did not happen in the world. Nobody remembers it. This failure is silent by default, and it is the single most corrosive bug in the engine: the story reads fine and the characters are quietly amnesiac.
+
+Every turn now carries a `bookkeeping` verdict — `ok`, `thin` (parsed, but recorded nothing despite substantial prose), or `failed` (nothing usable came back). Flagged turns show a banner and a re-run button; any turn can be re-run manually.
+
+A re-run keeps the prose. The snapshot for turn N is taken *before* N applies, so re-running N restores that snapshot and replays the same action and same prose through the whole downstream pipeline — simulator, clamps, applyDiff, physiology, reflection. One simulator call, no narrator call, illustration carried across. Undo restores the pre-re-run state.
+
+The trap worth naming: `rollback` finds the nearest *earlier* snapshot, not an exact one. Re-running a turn whose snapshot had aged out of the seven-entry ring would have replayed its prose against a state several turns stale and destroyed everything between. The re-run therefore demands an exact snapshot and refuses otherwise. Only the last several turns are re-runnable, and that is the honest limit rather than a silent catastrophe.
+
+## The ending
+
+A destination is an ending plus a number of turns: "in 30 turns, he has built the shelter." The turn count is the clock, and it is the only one. Progress is turns elapsed divided by turns budgeted — arithmetic, not a model's opinion. It cannot stall because a weak simulator failed to notice the story moved, and it has nothing to do with the chapter cadence, which exists to summarize history and save context.
+
+The chapter auditor still reads the story, but only to answer one question: what still stands between here and the ending? That sentence goes to the narrator. The auditor never scores progress and never decides when the ending arrives, with one exception — if the prose has already reached the ending, it says so, and the story stops pushing toward a place it has arrived.
+
+Acts are proportions of the budget, so a five-turn story passes through all of them just as a sixty-turn story does:
+
+- **open** (first quarter) — the ending is far. The player is free.
+- **rising** — scenes are asked to bring it nearer or show its cost.
+- **closing** (past halfway) — threads that do not serve the ending lose tension. Abandoned roads stop staying open. Pressure gets a floor.
+- **convergence** (final fifth) — unrelated threads close. Faction clocks turn toward the ending. No new subjects.
+- **arrival** (turns spent) — the ending is written in this scene.
+
+Two things make this hold. Fate changes threads, clocks, and pressure rather than only instructing the narrator, because a directive leaves the machinery pulling elsewhere. And if the narrator writes around the ending when it is due, the engine records it anyway one turn later — a weak model's reluctance is not a veto. When that happens the ending is marked `forced` rather than `earned`, and the aftermath is told not to pretend the player made it happen.

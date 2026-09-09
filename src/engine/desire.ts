@@ -1,0 +1,587 @@
+/**
+ * Desire — attraction as its own axis, separate from warmth. Deterministic, zero tokens.
+ *
+ * The model follows the classical Buddhist account of how wanting works, mapped onto the
+ * engine's relaxation kernel:
+ *
+ *   1. THE ARISING IS CONDITIONED, NOT CHOSEN. A pull toward someone arises at contact,
+ *      shaped by prior conditioning — what a person's world and history trained them to
+ *      find desirable (their `taste`, plus `attracted_to` orientation). It is a first read,
+ *      not a verdict, and it is NOT warmth: liking someone and wanting someone are separate
+ *      channels. Kindness earns gratitude; it does not manufacture desire.
+ *
+ *   2. WHAT HAPPENS NEXT DEPENDS ON THE BODY IT ARISES IN. The same pull, in an open
+ *      (relaxed) person, expresses cleanly — real flirtation, play, initiative — or is
+ *      simply enjoyed and released. In a clenched person the pull gets GRIPPED: it can't
+ *      come out straight, so it leaks sideways (staring, sharpness, avoidance,
+ *      overcorrection), and held long enough it hardens into fixation — a craving state
+ *      that itself taxes the nervous system (a small relaxation drain each turn while held:
+ *      craving is agitation). When the person settles again, the fixation dissolves on its
+ *      own — nothing gripping it, it liberates itself. Same energy, two trajectories,
+ *      decided by openness. This is the engine's core mechanic doing the gating.
+ *
+ *   3. WARMTH CAN EARN DESIRE, SLOWLY, WITH A CEILING. Sustained closeness lifts attraction
+ *      over time ("made up for it") — but if the conditioned first read was flat, the drift
+ *      plateaus at a companionate level: fondness with a mild pull, a different relationship,
+ *      not consuming passion. The simulator can still move attraction past the plateau, but
+ *      only with explicit cause in the prose.
+ */
+// SIMULATION LOD IS NOT RENDER LOD, and `central` was gating both.
+//
+// A background character was excluded from the emotion lifecycle, discharge, desire, rivalry and
+// repair — every one of which is pure arithmetic over numbers already in the save. Measured: zero
+// LLM references in emotions.ts, desire.ts, fault.ts, social.ts, remodel.ts. Excluding them saved
+// nothing at all, because what actually costs tokens is the CARD, and a background character's card
+// is one line either way (prompts.ts renders them as name + bearing and stops).
+//
+// So the two questions get separated. Who gets simulated: everybody, always, for free. Who gets
+// rendered in detail: the central cast, unchanged. A vendor with a nervous system costs the same as
+// a vendor without one, and when the scene finally turns to them they are somebody rather than
+// furniture that has been standing there at capacity since the turn they were named.
+import type { SaveState, Identity } from "./types";
+import { asText, asList, orientationIsMood } from "./coerce";
+import { getEdge } from "./social";
+import { relevance } from "./memory";
+import { clamp } from "./num";
+
+
+/** Stable per-pair noise so first reads are reproducible: -10..+15. */
+function pairNoise(a: string, b: string): number {
+  const s = a + "|" + b;
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+  return ((Math.abs(h) % 100) / 100) * 25 - 10;
+}
+
+/** Stable per-person noise so a fallback beauty is reproducible per character: -8..+8. */
+function soloNoise(id: string): number {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
+  return ((Math.abs(h) % 100) / 100) * 16 - 8;
+}
+
+/**
+ * Intrinsic attractiveness, 0..100 — the millisecond snap-read, BEFORE any observer's taste.
+ * Species-agnostic: symmetry, youth/vitality, presence, striking features — the model that
+ * created the character sets it. When unset (older saves, or the AI omitted it), we derive a
+ * deterministic fallback: a broad youth/vitality curve peaking in the reproductively-signalled
+ * years and easing on both sides, plus stable per-person noise so not everyone is average.
+ * This is not a claim that only the young are beautiful — it's the default prior a stranger's
+ * nervous system applies at first sight; the authored value should override it whenever it exists.
+ */
+export function beautyOf(c: Identity): number {
+  if (typeof c.beauty === "number") return clamp(c.beauty, 0, 100);
+  const age = typeof c.age === "number" ? c.age : 30;
+  // youth/vitality curve: rises through adolescence, broad plateau ~18–32, gentle decline after.
+  let v: number;
+  if (age < 18) v = 44 + (age - 13) * 2;          // pre-adult: lower, climbing
+  else if (age <= 32) v = 56;                      // peak plateau
+  else v = Math.max(30, 56 - (age - 32) * 0.7);    // slow decline, floored
+  return clamp(Math.round(v + soloNoise(c.character_id ?? c.name ?? "")), 0, 100);
+}
+
+/** Map intrinsic beauty (0..100, 50≈ordinary) to a signed baseline pull (-25..+45).
+ *  This is the shared first read everyone gets before personal taste is applied. */
+function beautyPull(beauty: number): number {
+  // 50 → ~0 (neutral). 75 → ~+25 (turns heads). 90 → ~+42. 30 → ~-16 (off-putting).
+  return clamp(Math.round((beauty - 50) * (beauty >= 50 ? 1.7 : 0.9)), -25, 45);
+}
+
+/**
+ * Vocabulary that marks a card's mention of another person as DESIRE or PARTNERSHIP rather than
+ * mere acquaintance. Deliberately excludes manufacture verbs ("created by", "made for") on their
+ * own: a guard captain conjured into existence is created by the player too, and she is not in
+ * love with him. The devotion has to be stated as devotion.
+ */
+const DEVOTION = /\b(wife|husband|spouse|bride|groom|partner|lover|beloved|consort|paramour|mistress|betrothed|fianc\w*|marriage|married|obsess\w*|infatuat\w*|besotted|smitten|devoted|devotion|adores?|adoring|worships?|in love|loves? (him|her|them)|belongs? to|his better half|her better half)\b/i;
+
+/**
+ * AUTHORED BONDS ARE NOT STRANGERS' FIRST READS.
+ *
+ * The seed below models a stranger's nervous system at contact: beauty, then personal taste. That
+ * is the right model for a stranger and the wrong model for someone whose CARD already says who
+ * they are to this person — a wife, a lover, someone written as obsessed with them. Those
+ * characters were authored (by the forge, by the simulator, or by a player who built them on
+ * purpose) with the relationship already in place, and running them through a stranger's first
+ * read overwrites the authorship with a beauty score.
+ *
+ * That is exactly how a character created as the player's partner comes out at zero desire and
+ * then behaves, correctly and permanently, like someone who feels nothing: the ledger says she
+ * doesn't want him, so the narrator is told not to invent that she does.
+ *
+ * So: read the observer's OWN card for the target's name, and return a floor the conditioned read
+ * cannot undercut. `taste` naming them is the strongest signal available — taste IS the desire
+ * channel, and a taste that names a specific person is a card saying "this one." A name appearing
+ * elsewhere (background, traits, values, drives) counts only alongside devotion vocabulary;
+ * otherwise it is a colleague, a rival, or a parent, and desire would be an invention.
+ *
+ * Returns 0 when nothing is authored — the overwhelming majority of pairs, which keep the
+ * stranger's read untouched.
+ */
+export function authoredPull(from: Identity, to: Identity): number {
+  const { inTaste, clauses } = namedClauses(from, to);
+  if (!clauses.length) return 0;
+  // Only the clauses that actually name them get a vote; a devotion word three sentences away
+  // belongs to somebody else.
+  const devoted = clauses.some((c) => DEVOTION.test(c));
+  if (inTaste) return devoted ? 65 : 50;
+  return devoted ? 55 : 0;
+}
+
+/** Relationship nouns worth writing onto the edge as a structured role. */
+const RELATION_NOUN = /\b(wife|husband|spouse|bride|groom|partner|lover|beloved|consort|betrothed|fianc\w+|mistress|paramour)\b/i;
+
+/**
+ * The relationship a card STATES, for stamping onto the edge as a role. `roles` is the structured
+ * half of the ledger and everything downstream reads it — the desire line, rivalry, whether a
+ * driving character carries the player along — but nothing ever wrote it from the card, so a
+ * character whose own background calls her the player's wife had an empty `roles` array and was
+ * treated by every one of those systems as an acquaintance.
+ */
+export function authoredRole(from: Identity, to: Identity): string | null {
+  const { clauses } = namedClauses(from, to);
+  for (const c of clauses) {
+    const m = c.match(RELATION_NOUN);
+    if (m) return m[0].toLowerCase();
+  }
+  return null;
+}
+
+/** Clauses of the observer's OWN card that name the target, plus whether `taste` was one of them. */
+function namedClauses(from: Identity, to: Identity): { inTaste: boolean; clauses: string[] } {
+  const empty = { inTaste: false, clauses: [] as string[] };
+  const name = asText(to.name).trim();
+  if (name.length < 2) return empty;
+  const nameRe = new RegExp(`\\b${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
+  const taste = asText(from.taste);
+  const self = [
+    asText(from.background, " "),
+    asList(from.core_traits).join(". "),
+    asList(from.values).join(". "),
+    asText(from.drive?.goal),
+    ...(from.drive_queue ?? []).map((d) => asText(d?.goal)),
+  ].join(". ");
+  const inTaste = nameRe.test(taste);
+  if (!inTaste && !nameRe.test(self)) return empty;
+  const clauses = `${taste}. ${self}`
+    .split(/(?<=[.!?;])\s+|\n+|\s—\s/)
+    .filter((c) => nameRe.test(c));
+  return { inTaste, clauses };
+}
+
+/**
+ * Orientation gate. Returns null when no cap applies, otherwise the maximum attraction
+ * this pairing can hold. "no one" caps at 0; a stated orientation that excludes the target
+ * caps at 5 (aesthetic appreciation without desire). Permissive when data is missing —
+ * absence of a field never manufactures a gate.
+ */
+export function orientationCap(from: Identity, to: Identity): number | null {
+  const o = asText(from.attracted_to).toLowerCase();
+  if (!o) return null;
+  if (/\b(no ?one|none|nobody)\b/.test(o)) {
+    // "NO ONE, CURRENTLY" IS NOT AN ORIENTATION. IT IS A TUESDAY.
+    //
+    // This field means who a person CAN desire at all, and 0 here is a permanent hard cap: the seed
+    // is zero, every later reading is zero, and no amount of story moves it. The forge is asked for
+    // one of four values and answers with a state and a justification. One save's card read
+    //
+    //     attracted_to: "no one — currently too raw and survival-focused"
+    //
+    // and thirty-one turns later that character stood at warmth 86 and trust 48 toward the player,
+    // carrying the roles dependent and possessive, with attraction pinned at exactly 0 — while two
+    // people who had barely met him sat at 58 and 62. The player had spent half the game with her
+    // and asked, reasonably, how she could not be drawn to him.
+    //
+    // A qualifier that dates the statement is the tell. Someone who does not experience attraction
+    // says so without a clock on it; "currently", "for now", "still", "after what happened" all
+    // describe a person who is not available YET, which is warmth and trust and openness doing their
+    // job, not an orientation. So it stops hard-gating and lets the ordinary dynamics run.
+    return orientationIsMood(o) ? null : 0;
+  }
+  if (/\b(anyone|everyone|any|all)\b/.test(o)) return null;
+  const p = asText(to.pronouns).toLowerCase();
+  const targetFem = /\bshe\b|\bher\b/.test(p);
+  const targetMasc = /\bhe\b|\bhim\b/.test(p);
+  if (!targetFem && !targetMasc) return null; // they/them or unknown: don't hard-gate
+  const wantsFem = /wom[ae]n|female|girls?|femme/.test(o);
+  const wantsMasc = /\bm[ae]n\b|\bmale\b|boys?|\bmasc/.test(o);
+  if (targetFem && wantsFem) return null;
+  if (targetMasc && wantsMasc) return null;
+  if (wantsFem || wantsMasc) return 5;
+  return null;
+}
+
+/**
+ * First read — set once, the moment two people share a scene. Conditioning (taste) matched
+ * against what the target actually is (appearance, traits, background), plus stable noise
+ * and a small head start from existing warmth. Never authors the player's own desire.
+ */
+export function seedAttraction(state: SaveState, fromId: string, toId: string): void {
+  if (fromId === toId || fromId === "char_player") return;
+  const from = state.characters[fromId], to = state.characters[toId];
+  if (!from || !to) return;
+  const e = getEdge(state.world.edges, fromId, toId);
+  if (e.attraction !== undefined) return;
+  const cap = orientationCap(from, to);
+  let a: number;
+  if (cap !== null && cap <= 5) {
+    // orientation excludes this target: no desire, whatever they look like. Aesthetic appreciation only.
+    a = 0;
+  } else {
+    // BASELINE — the millisecond snap-read: intrinsic beauty, before personal taste. Beauty is
+    // objective (symmetry/vitality is a given) and the body registers it fully regardless of clench.
+    // Clench does NOT reduce the pull — a clenched nervous system wants the beautiful thing just as
+    // much, often more. What clench governs is ADMISSIBILITY (below): whether that wanting can reach
+    // the person's own self-report, or discharges sideways as grasping/possession. So the seed
+    // magnitude is the clean intrinsic pull; the entrance clench is stamped separately.
+    const base = beautyPull(beautyOf(to));
+    // PERSONAL DEVIATION — this observer's conditioning (taste) matched against what the target IS.
+    // A taste match makes them extra compelling on top of the shared read; a flat/mismatched taste
+    // leaves only the baseline. asText/asList (not `?? ""`): pre-coercion saves hold arrays/strings.
+    // The target's NAME is part of the blob: a taste written as "Rabi's qualities — power, vision"
+    // is a card naming a person, and matching it against a blob that never contains their name
+    // scored zero and threw the authorship away.
+    const targetBlob = [asText(to.name), asText(to.appearance_facts, " "), asList(to.core_traits).join(" "), asText(to.background, " ")].join(" ");
+    const taste = asText(from.taste);
+    const match = taste ? relevance(targetBlob, taste) : 0; // 0..1 token overlap
+    const tasteBonus = match * 40; // taste deviates UP from the shared baseline, doesn't replace it
+    a = Math.round(clamp(base + tasteBonus + pairNoise(fromId, toId) + (e.warmth > 0 ? e.warmth * 0.1 : 0), -25, 80));
+    // A relationship the card already states outranks the stranger's read of a face. Never
+    // lowers — an authored partner who is also beautiful keeps the higher number.
+    a = Math.max(a, authoredPull(from, to));
+  }
+  e.attraction = a;
+  e.attraction_base = a;
+  // ADMISSIBILITY STAMP — born grasping or born in awe. Set once, from how clenched the perceiver
+  // was at first sight. A pull that arises in a gripped body (low relaxation) is high-magnitude but
+  // can't reach clean self-report: it will express as possession, sharpness, gift-that's-taking —
+  // the picked flower. A pull that arises open is ownable: flirtation, letting-stand. Only stamped
+  // when there's actual desire to color; a null/near-zero pull needs no texture. This then DRIFTS
+  // toward current relaxation each turn (tickDesire) — slowly up under calm, faster down under clench.
+  if (a >= 12) {
+    const r = state.condition[fromId]?.psyche.relaxation ?? 0; // -10..+10
+    e.desire_admissibility = +clamp(0.5 + r * 0.05, 0, 1).toFixed(2); // clenched entrance ~0, open ~1
+  }
+}
+
+/**
+ * REPAIR PASS for edges seeded before authorship was consulted — and for edges whose person was
+ * authored AFTER the first read (a companion the story turned into a spouse fifty turns in).
+ *
+ * Idempotent and one-way: it only ever RAISES an edge to its authored floor, and only once per
+ * edge (`authored_seed`), so a couple who genuinely fall out can fall out and stay fallen. Runs
+ * every turn because the card can change at any time; costs one regex per present pair.
+ */
+export function repairAuthoredBonds(state: SaveState): string[] {
+  const shifts: string[] = [];
+  for (const e of state.world.edges) {
+    if (e.from === "char_player" || e.authored_seed) continue;
+    const from = state.characters[e.from], to = state.characters[e.to];
+    if (!from || !to || from.status === "dead") continue;
+    const floor = authoredPull(from, to);
+    if (!floor) continue;
+    const cap = orientationCap(from, to);
+    if (cap !== null && cap <= 5) { e.authored_seed = true; continue; } // authorship cannot override orientation
+    e.authored_seed = true;
+    // The stated relationship becomes a real role on the edge, so the systems that read `roles`
+    // (desire line, rivalry, whether a driver carries the player) stop seeing an acquaintance.
+    const role = authoredRole(from, to);
+    if (role && !(e.roles ?? []).some((r) => r.toLowerCase() === role)) e.roles = [...(e.roles ?? []), role];
+    if ((e.attraction ?? -100) >= floor && (e.attraction_base ?? -100) >= floor) continue;
+    e.attraction = Math.max(e.attraction ?? 0, floor);
+    e.attraction_base = Math.max(e.attraction_base ?? 0, floor);
+    e.updated_turn = state.world.current_turn;
+    if (e.desire_admissibility === undefined) {
+      const r = state.condition[e.from]?.psyche.relaxation ?? 0;
+      e.desire_admissibility = +clamp(0.5 + r * 0.05, 0, 1).toFixed(2);
+    }
+    shifts.push(`${from.name}'s written bond with ${to.name} is restored to the ledger — the card said it all along.`);
+  }
+  return shifts;
+}
+
+/**
+ * BEAUTY RECOMPUTE (delta-propagation). When a person's judged-on-sight appearance changes
+ * permanently — a scar, aging, weight change, an ear blown off, being shrunk — their intrinsic
+ * beauty is re-scored (by the caller: either the small AI rescore or the manual button), and the
+ * change must ripple to everyone already attracted to them WITHOUT resetting those edges. An
+ * established bond is history; a new scar shifts it, it does not erase it. So we nudge each
+ * existing attraction edge toward the new first-read by the beauty delta, scaled DOWN the more
+ * invested/warm the observer already is: a stranger's flicker of interest tracks looks almost
+ * fully; a devoted partner barely moves. Returns the number of edges nudged.
+ */
+export function applyBeautyChange(state: SaveState, toId: string, oldBeauty: number, newBeauty: number): number {
+  const dPull = beautyPull(clamp(newBeauty, 0, 100)) - beautyPull(clamp(oldBeauty, 0, 100));
+  if (dPull === 0) return 0;
+  let nudged = 0;
+  for (const e of state.world.edges) {
+    if (e.to !== toId || e.attraction === undefined) continue;
+    if (e.from === "char_player") continue; // never author the player's own desire
+    // investment 0..1: warmth + how far attraction sits above baseline both count as "bond".
+    const warmthInv = clamp(Math.abs(e.warmth) / 100, 0, 1);
+    const invested = clamp(warmthInv * 0.7 + clamp(e.attraction / 100, 0, 1) * 0.3, 0, 1);
+    // strangers track the delta ~fully; the deeply-bonded barely move (down to ~15%).
+    const scale = 1 - invested * 0.85;
+    const shift = dPull * scale;
+    e.attraction = Math.round(clamp(e.attraction + shift, -25, 100));
+    // the conditioned FIRST read also drifts, but half as much — bedrock memory of the first sight.
+    if (e.attraction_base !== undefined) e.attraction_base = Math.round(clamp(e.attraction_base + shift * 0.5, -25, 100));
+    e.updated_turn = state.world.current_turn;
+    nudged++;
+  }
+  return nudged;
+}
+
+
+export function attractionWord(a: number): string {
+  if (a <= -15) return "averse";
+  if (a < 15) return "not drawn";
+  if (a < 35) return "drawn to";
+  if (a < 55) return "wants";
+  return "aches for";
+}
+
+/** One digest line: this character's desire toward the player, gated by their openness. */
+export function desireLine(state: SaveState, id: string): string {
+  const e = state.world.edges.find((x) => x.from === id && x.to === "char_player");
+  if (!e || e.attraction === undefined) return "";
+  const a = e.attraction;
+  const r = state.condition[id]?.psyche.relaxation ?? 0;
+  const cold = typeof state.characters[id]?.conscience === "number" && state.characters[id].conscience! <= 0.35;
+  if (a <= -15) return "desire toward you: none, actively repelled — SHOW: subtle withdrawal, stiffening at closeness; never narrate the aversion as a stated feeling";
+  // A LOW NUMBER IS NOT AN ABSENT BOND. The "none" line below is written for a stranger, and
+  // handing it to the narrator about the player's own partner is how a devoted character gets
+  // rendered as a wall every turn: told the desire is absent AND told not to invent it, the only
+  // consistent performance left is indifference. When the ledger holds a real attachment — a
+  // stated romantic role, or warmth well past cordial — say what IS there instead of denying what
+  // isn't. This still never manufactures heat: it licenses the attachment, not passion.
+  const romantic = (e.roles ?? []).some((r) => ROMANTIC_ROLE.test(r));
+  if (a < 15 && (romantic || e.warmth >= 25)) {
+    const named = romantic ? `${e.roles!.filter((r) => ROMANTIC_ROLE.test(r)).join("/")}` : "close";
+    return `desire toward you: quiet (${Math.round(a)}) but THE BOND IS REAL and established (${named}, warmth ${Math.round(e.warmth)}) — SHOW: they seek your company, take up space near you, touch and are touched without ceremony, claim you in front of others, and are hurt when handled as staff rather than as theirs; the heat is banked, not absent. NEVER write them as indifferent, distant, or newly meeting you, and never narrate 'she felt nothing' — a settled attachment reads as ease and claim, not as a wall.`;
+  }
+  if (a < 15) return "desire toward you: none — SHOW: warmth stays platonic, a flirt would land awkward; do not invent attraction, and never narrate 'she felt nothing'";
+  const adm = e.desire_admissibility ?? clamp(0.5 + r * 0.05, 0, 1);
+  /* ── WANTING WITHOUT LIKING ────────────────────────────────────────────────────────────────
+   *
+   * Every line below this point was written for desire that sits INSIDE a bond, and each one says
+   * so in its verbs: flirts, teases, seeks closeness, lets you be. Handed to a character at warmth
+   * 0 that is the behaviour of fondness, and handed to one at warmth −55 it is handed alongside
+   * "resents or hates you — openly cold and antagonistic" from the disposition cue, with nothing
+   * anywhere saying how the two combine. So the narrator got two unrelated instructions and did
+   * what anyone would do with a contradiction: picked the one that was longer, more concrete and
+   * more emphatic, which is always the hostility. The desire was sanded off every scene.
+   *
+   * The premise of this whole module is that liking and wanting are separate channels, and it was
+   * only ever enforced in one direction — warmth must not manufacture desire. The other direction
+   * was never written down, so in practice the engine could not produce the most ordinary thing in
+   * the world: wanting someone you do not like, or wanting someone you have no feelings about at
+   * all. Both are real, both are common, and both have their own behaviour, which is not a cooler
+   * version of flirtation. It is a different register entirely — proximity without warmth, contact
+   * that arrives as friction, an appetite that has no interest in the person's day.
+   *
+   * These sit ABOVE the admissibility lines because warmth outranks texture here: how a pull is
+   * held matters less than whether there is any liking under it at all. */
+  const HOSTILE = -20, COOL = 15;
+  if (a >= 30 && e.warmth <= HOSTILE) {
+    return adm <= 0.4
+      ? `desire toward you: strong (${a}) AND THEY CANNOT STAND YOU (warmth ${Math.round(e.warmth)}) — both are true at once. Do not let either one cancel the other. SHOW: they keep ending up where you are and are angry about it; they stand nearer than the argument needs; they touch you in ways that are not kind; contempt that keeps coming back for more of you; needling as a way of making contact; punishing you for a pull they will not own. NEVER soften this into flirtation, banter, or secret tenderness, never let it resolve into liking you, and NEVER narrate the wanting — the hostility is real, the wanting is real, and this does not develop into a bond.`
+      : `desire toward you: real (${a}) while they dislike you (warmth ${Math.round(e.warmth)}) — both true at the same time, and they KNOW it about themselves. SHOW: frank, unsentimental appetite with no affection attached — they will say the cold thing and want you in the same breath, seek you out and give you nothing, be unembarrassed about the contradiction. NEVER write this as warmth breaking through, as a softening, or as banter that means they secretly care; do not make them nicer because they want you.`;
+  }
+  if (a >= 30 && e.warmth < COOL && !romantic) {
+    return `desire toward you: real (${a}) with no attachment behind it (warmth ${Math.round(e.warmth)}) — they want you and have no particular feelings about you. Treat that as finished rather than as a bond that has not formed yet. SHOW: direct appetite without courtship — interest in your body and your presence, none in your day; they do not ask after you, do not soften, do not seek your company for its own sake, and are unbothered by whether you like them. NEVER render this as fondness, tenderness, or the beginning of caring, and never narrate the wanting outright — it is in what they do.`;
+  }
+  // Each line: a behavioral instruction (what to SHOW) plus an explicit NEVER — the narrator must not
+  // convert the desire into a quotable interior sentence ("she resented not having him"). Magnitude (a)
+  // is kept for calibration; the interpretation is stripped so it can't be paraphrased into prose.
+  if (cold) return adm >= 0.4
+    ? `desire toward you: strong (${a}), cold-natured — SHOW: patient charming pursuit, warmth deployed as a tool, gifts with strings; NEVER narrate the wanting or that the charm is technique — behavior only, let the player sense it`
+    : `desire toward you: strong (${a}), cold and grasping — SHOW: possessiveness, tallying who's near you, sharpness toward rivals, a gift that's really a claim; NEVER narrate resentment, wanting, or "she resented not having him" — only the acts`;
+  if (adm >= 0.6) return `desire toward you: real (${a}), settled — SHOW: flirts, teases, seeks closeness, lets you be; NEVER state the wanting outright — render it as behavior`;
+  if (adm <= 0.35) return `desire toward you: strong (${a}) but unadmitted — SHOW: it leaks as grasping — possessiveness, sharpness, taking-for-your-own-good, a claim dressed as care; NEVER narrate the pull or that they can't admit it — only what they DO`;
+  return `desire toward you: real (${a}), not yet settled — SHOW: surfaces in small glances and half-gestures when the moment allows; NEVER state it outright — behavior only`;
+}
+
+/**
+ * Per-turn drift for present characters. Warmth slowly earns attraction under a
+ * base-dependent ceiling; strong pull held in a clenched body becomes fixation
+ * (an active state that drains relaxation while held and dissolves when the
+ * person settles).
+ */
+export function tickDesire(state: SaveState): string[] {
+  const shifts: string[] = [];
+  const player = state.characters["char_player"];
+  for (const id of state.world.present) {
+    const c = state.characters[id];
+    if (!c || id === "char_player" || c.status === "dead") continue;
+    const e = state.world.edges.find((x) => x.from === id && x.to === "char_player");
+    if (!e || e.attraction === undefined) continue;
+    // "made up for it": sustained warmth lifts attraction, capped by the conditioned first read.
+    const base = e.attraction_base ?? e.attraction;
+    // A flat first read plateaus at companionate — unless the bond ITSELF has become the cause.
+    // A stated romantic role, or warmth past the point where "we are close" understates it, is the
+    // story saying this is not a friendship, and a ceiling derived from a stranger's first glance
+    // has no standing to contradict it.
+    const romantic = (e.roles ?? []).some((r) => ROMANTIC_ROLE.test(r));
+    const ceiling = base >= 15 || romantic ? 100 : Math.max(40, Math.round(e.warmth));
+    // A RAMP, NOT A CLIFF. The old gate opened at exactly warmth 35 and moved 0.2/turn or nothing,
+    // which left a devoted companion sitting at warmth 33 frozen forever — indistinguishable, in
+    // the state and therefore on the page, from a stranger. Closeness starts earning desire where
+    // closeness starts, and earns it faster the closer it gets.
+    if (e.warmth >= 20 && e.attraction >= 0 && e.attraction < ceiling && player && orientationCap(c, player) === null) {
+      const rate = 0.1 + clamp((e.warmth - 20) / 40, 0, 1) * 0.2; // 0.1/turn at warmth 20 → 0.3 at 60+
+      e.attraction = Math.min(ceiling, +(e.attraction + rate).toFixed(2));
+    }
+    const cond = state.condition[id];
+    if (!cond) continue;
+    // ADMISSIBILITY DRIFT — the stamped grasp/awe texture migrates toward CURRENT relaxation, but
+    // asymmetrically: learning to see rather than pick is slow work; losing it under stress is fast.
+    // Target = where this body's current openness would place the wanting. Creeps UP (+0.02/turn) when
+    // the target is higher than now; drops DOWN (−0.06/turn, ~3× faster) when clench pulls it lower.
+    // The groove down is always easier to fall into than the climb out.
+    if (e.desire_admissibility !== undefined && e.attraction >= 12) {
+      const target = clamp(0.5 + cond.psyche.relaxation * 0.05, 0, 1);
+      const cur = e.desire_admissibility;
+      if (target > cur) e.desire_admissibility = +Math.min(target, cur + 0.02).toFixed(2);
+      else if (target < cur) e.desire_admissibility = +Math.max(target, cur - 0.06).toFixed(2);
+    }
+    const label = `fixated on ${player?.name ?? "you"}`;
+    const has = cond.psyche.active_states.includes(label);
+    if (e.attraction >= 45 && cond.psyche.relaxation <= -3 && !has) {
+      cond.psyche.active_states.push(label);
+      shifts.push(`${c.name} is holding on too tight — wanting has turned into gripping.`);
+    } else if (has && cond.psyche.relaxation >= 2) {
+      cond.psyche.active_states = cond.psyche.active_states.filter((s) => s !== label);
+      shifts.push(`${c.name}'s grip loosens — the wanting is still there, held lightly now.`);
+    }
+    if (cond.psyche.active_states.includes(label)) {
+      cond.psyche.relaxation = Math.max(-10, +(cond.psyche.relaxation - 0.3).toFixed(2));
+    }
+  }
+  return shifts;
+}
+
+/** Translate raw warmth/trust toward the player into an explicit BEHAVIORAL cue on a named emotional
+ *  scale, so the narrator understands what the numbers MEAN, not just a bare figure it can default
+ *  past. Warmth (−100..100) is how much they CARE; trust (−100..100) is how much they RELY on you.
+ *  They diverge: someone can care deeply while still not trusting (warm but cautious), which reads as
+ *  warmth WITH guardedness, never as coldness. The key failure this fixes is a narrator fixating on
+ *  low trust and writing a loyal, warming companion as a hostile stranger. */
+export function dispositionCue(warmth: number, trust: number): string {
+  // warmth band on the full scale, with what it looks like in behavior. Every band says what the
+  // person DOES, including how they disagree — warmth lowers ceremony, not independence, and a
+  // band that only describes affection renders as a compliance machine.
+  const care =
+    warmth >= 70 ? "loves you / devoted (warmth very high) — open affection, protectiveness, seeks your closeness; devotion is not obedience: they refuse freely, tease you, argue when they think you are wrong, and keep their own plans" :
+    warmth >= 45 ? "is fond of you (warmth high) — visibly cares, softens around you, small kindnesses; comfortable teasing you, disagreeing, and saying no" :
+    warmth >= 20 ? "likes you and is warming (warmth moderate, on a −100..100 scale where 0 is a stranger) — friendly, glad you're near; talks freely, including disagreement" :
+    warmth >= 5 ? "is mildly well-disposed (warmth slight) — cordial, pleasant; slow to grant a FAVOR, but ordinary business is ordinary business" :
+    warmth > -5 ? "is neutral (warmth ~0) — a stranger's baseline: polite, measuring, noncommittal about anything that costs them; asks small questions and watches before volunteering anything BEYOND their ordinary dealings" :
+    warmth > -20 ? "is cool toward you (warmth mildly negative) — distant, unengaged, polite brush-offs" :
+    warmth > -45 ? "dislikes you (warmth negative) — sharp, unwelcoming" :
+    "resents or hates you (warmth very negative) — openly cold or antagonistic";
+  const rely =
+    trust >= 50 ? "and trusts you (relies on your word, lowers their guard — reliance, not deference: they still judge for themselves)" :
+    trust >= 20 ? "and is starting to trust you (testing, hopeful)" :
+    trust >= 0 ? "but doesn't fully trust you yet (still cautious, watching)" :
+    trust > -25 ? "and is wary of trusting you (guarded, keeps a little distance)" :
+    "and does not trust you (expects the worst, stays defensive)";
+  // spell out the divergence so the narrator can't collapse warm-but-cautious into cold
+  const note = warmth >= 20 && trust < 20
+    ? " — RENDER BOTH: the warmth is real and shows (care, softness, loyalty), the low trust only makes them guarded, NOT cold or hostile; do not write a caring character as a distant stranger"
+    : warmth <= -20
+      ? " — this coldness is THIS character's earned stance from what's passed between you, not a default suspicion to apply to everyone"
+      : warmth >= 45 && trust >= 20
+        ? " — let this warmth be plainly visible; do not make the player re-earn it every scene"
+        : "";
+  // A TRANSACTION IS NOT A FAVOR. Low warmth means slow to give, slow to trust, slow to commit — it
+  // does not mean a publican refuses to sell a drink. Without this said outright, every band above
+  // reads as blanket obstruction and the whole world becomes a wall: an innkeeper handed a year's
+  // wages in gold spends three turns deciding whether to pour, and the player stops asking anyone
+  // for anything. Coldness is about what someone will GIVE, never about whether their trade works.
+  const trade = " — TRANSACTIONS ARE NOT FAVORS: whatever this person does for a living they still do, for a stranger, at the usual price, without needing to like them. Selling, serving, ferrying, directing, renting, answering a question any passer-by could answer — none of that is a concession and none of it needs warmth. Withhold favors, trust, secrets, loyalty, and risk; do not withhold the ordinary business of the world.";
+  return `${care} ${rely}${note}${trade}`;
+}
+
+// ─────────────────────────── RIVALRY ───────────────────────────
+// Jealousy, modeled as the same energy as fixation: desire is directional (A wants B), so when two
+// present characters want the SAME person and one watches the other's pursuit LAND, the loser's
+// nervous system registers the threat. This is the cause half of cause-and-effect — a deterministic
+// relaxation dip plus an active_state the emotion lifecycle and narrator then carry. Attachment
+// shapes both the size of the hit and how easily it GRIPS: anxious attaches fastest and holds
+// longest (the state sticks even from relative calm, because the pattern is pre-loaded); secure
+// feels the pang and lets it move unless already clenched; avoidant armors over it — small dip, and
+// what it can't feel it shows sideways. Deterministic, zero tokens; the narrator renders it.
+
+const ROMANTIC_ROLE = /date|lover|girlfriend|boyfriend|partner|crush|spouse|wife|husband|fianc|romanc|in love|woo|courting|beloved|fling|mistress|affair/i;
+const JEALOUS_PREFIX = "jealous of ";
+
+/** Does `fromId` hold desire toward `targetId`? Attraction past the "drawn" floor, OR a romantic
+ *  role on their edge — the bookkeeper's label for desire the numbers may not have caught up with. */
+function holdsDesire(state: SaveState, fromId: string, targetId: string): boolean {
+  const e = state.world.edges.find((x) => x.from === fromId && x.to === targetId);
+  if (!e) return false;
+  if ((e.attraction ?? 0) >= 25) return true;
+  return (e.roles ?? []).some((r) => ROMANTIC_ROLE.test(r));
+}
+
+/**
+ * Per-turn rivalry pass for present central characters. Finds the sharpest rival in the room —
+ * someone who wants the same target AND whose pursuit is visibly landing — and charges the watcher
+ * for it. "Landing" for an NPC target means the target is warm back; for the PLAYER it means the
+ * rival is warmly pursuing, because the player's own response is theirs and never authored here.
+ */
+export function tickRivalry(state: SaveState): string[] {
+  const shifts: string[] = [];
+  const present = state.world.present.filter((id) => id !== "char_player" && state.characters[id] && state.characters[id].status !== "dead");
+  for (const watcherId of present) {
+    const watcher = state.characters[watcherId];
+    const cond = state.condition[watcherId];
+    if (!watcher || !cond) continue;
+
+    // everyone in the room the watcher wants (the player counts as in the room)
+    const targets = state.world.present.filter((t) => t !== watcherId && holdsDesire(state, watcherId, t));
+    let sharpest: { rivalId: string; heat: number } | undefined;
+    for (const targetId of targets) {
+      for (const rivalId of present) {
+        if (rivalId === watcherId || rivalId === targetId) continue;
+        if (!holdsDesire(state, rivalId, targetId)) continue;
+        const pursuit = state.world.edges.find((x) => x.from === rivalId && x.to === targetId);
+        const landing = targetId === "char_player"
+          ? (pursuit?.warmth ?? 0) >= 40   // warm, visible pursuit of the player: threatening on its own
+          : (state.world.edges.find((x) => x.from === targetId && x.to === rivalId)?.warmth ?? 0) >= 30; // the target warms back
+        if (!landing) continue;
+        const heat = (pursuit?.attraction ?? 0) + (pursuit?.warmth ?? 0);
+        if (!sharpest || heat > sharpest.heat) sharpest = { rivalId, heat };
+      }
+    }
+
+    const held = cond.psyche.active_states.filter((s) => s.startsWith(JEALOUS_PREFIX));
+    if (sharpest) {
+      const style = watcher.attachment?.style ?? "secure";
+      // magnitude: anxious grips hardest; grip threshold: how settled they must be to NOT hold it
+      const mult = style === "anxious" ? 1.5 : style === "disorganized" ? 1.25 : style === "avoidant" ? 0.5 : 0.75;
+      const gripBelow = style === "anxious" ? 7 : style === "disorganized" ? 6 : style === "avoidant" ? 3 : 4;
+      const dip = Math.min(0.6, 0.4 * mult); // capped: a slow drag, never a shove
+      cond.psyche.relaxation = clamp(cond.psyche.relaxation - dip, -10, 10);
+      const label = JEALOUS_PREFIX + (state.characters[sharpest.rivalId]?.name ?? sharpest.rivalId);
+      if (cond.psyche.relaxation < gripBelow) {
+        if (!cond.psyche.active_states.includes(label)) {
+          cond.psyche.active_states.push(label);
+          shifts.push(`${watcher.name} registers the competition — watching ${state.characters[sharpest.rivalId]?.name} close in costs them.`);
+        }
+        // stale labels for rivals no longer sharpest fall away
+        for (const s of held) if (s !== label) cond.psyche.active_states = cond.psyche.active_states.filter((x) => x !== s);
+      } else if (held.length) {
+        // settled past their grip threshold: felt the pang (the dip), let it move — no state held
+        cond.psyche.active_states = cond.psyche.active_states.filter((s) => !s.startsWith(JEALOUS_PREFIX));
+        shifts.push(`${watcher.name} feels the pang and lets it go — settled enough not to grip it.`);
+      }
+    } else if (held.length) {
+      // no rival landing in the room: the state has nothing to push against and releases
+      cond.psyche.active_states = cond.psyche.active_states.filter((s) => !s.startsWith(JEALOUS_PREFIX));
+      shifts.push(`${watcher.name}'s jealousy loosens — nothing to push against right now.`);
+    }
+  }
+  return shifts;
+}

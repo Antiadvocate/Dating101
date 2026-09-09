@@ -1,0 +1,564 @@
+@import "tailwindcss";
+
+/* ───────── WEFT design tokens ─────────
+   A reading app at night. Flat surfaces, hairline borders, one accent family per era.
+
+   FOUR FACES, EACH WITH ONE JOB — and until now there were only three, none of which was a
+   user-interface face. `body` inherited --font-prose, so every button, label, field and row in the
+   app was set in Newsreader: a serif designed for reading paragraphs, doing duty as chrome. Inter
+   was in the font link on every page load, downloaded, and referenced exactly once — against
+   `var(--font-sans, inherit)`, a token that did not exist, so even that one fell back to the serif.
+   Somebody meant to do this and stopped halfway.
+
+     --font-sans     Inter. THE INTERFACE. Buttons, labels, fields, chips, cards, everything you
+                     operate rather than read. This is the default now; body inherits it.
+     --font-prose    Newsreader. THE STORY, and nothing else. The narrative stream only.
+     --font-display  Fraunces. Headings and titles.
+     --font-mono     IBM Plex Mono. NUMBERS AND CODE — a clock, a count, a raw JSON editor. It was
+                     being used for every button and every field label in the app, which is what
+                     made a character sheet read like a terminal printout. */
+
+:root {
+  --ink-0: #0e0d0b;
+  --ink-1: #151310;
+  --ink-2: #1c1915;
+  --ink-3: #27221b;
+  --line: rgba(236, 228, 212, 0.08);
+  --line-strong: rgba(236, 228, 212, 0.16);
+  --text-hi: #efe9db;
+  --text-mid: #b8ad97;
+  --text-lo: #8d8471;
+  --accent: #e0955a;          /* ember default */
+  --accent-soft: rgba(224, 149, 90, 0.14);
+  --accent-glow: rgba(224, 149, 90, 0.30);
+  --danger: #cf5a4e;
+  --calm: #82a884;
+  --radius: 16px;
+  --font-display: "Fraunces", serif;
+  --font-prose: "Newsreader", serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "IBM Plex Mono", monospace;
+}
+
+[data-theme="ember"]     { --accent: #e0955a; --accent-soft: rgba(224,149,90,.14); --accent-glow: rgba(224,149,90,.30); }
+[data-theme="verdigris"] { --accent: #64b3a1; --accent-soft: rgba(100,179,161,.13); --accent-glow: rgba(100,179,161,.28); }
+[data-theme="rust"]      { --accent: #cf7550; --accent-soft: rgba(207,117,80,.14); --accent-glow: rgba(207,117,80,.30); }
+[data-theme="frost"]     { --accent: #94b9ce; --accent-soft: rgba(148,185,206,.13); --accent-glow: rgba(148,185,206,.28); }
+
+html, body, #root { height: 100%; }
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  background: var(--ink-0);
+  color: var(--text-hi);
+  font-family: var(--font-sans);
+  font-optical-sizing: auto;
+  overscroll-behavior-y: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-font-smoothing: antialiased;
+}
+
+.font-display { font-family: var(--font-display); }
+.font-prose   { font-family: var(--font-prose); }
+.font-sans    { font-family: var(--font-sans); }
+.font-mono    { font-family: var(--font-mono); }
+
+/* ───────── app shell ─────────
+   --app-h is set from visualViewport so the composer rides above the iOS
+   keyboard instead of disappearing under it. Falls back to dynamic vh. */
+.shell {
+  height: var(--app-h, 100dvh);
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar {
+  padding-top: env(safe-area-inset-top);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+  background: color-mix(in srgb, var(--ink-0) 82%, transparent);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+  backdrop-filter: blur(16px) saturate(1.2);
+  border-bottom: 1px solid var(--line);
+}
+
+/* icon-only tab bar: six destinations, one thumb's reach, no label row */
+.tabbar {
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+  background: color-mix(in srgb, var(--ink-0) 86%, transparent);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+  backdrop-filter: blur(16px) saturate(1.2);
+  border-top: 1px solid var(--line);
+}
+.tab-btn {
+  position: relative;
+  display: flex; align-items: center; justify-content: center;
+  min-width: 44px; min-height: 44px; flex: 1;
+  color: var(--text-lo);
+  transition: color .18s;
+  user-select: none; -webkit-user-select: none;
+}
+.tab-btn.on { color: var(--accent); }
+.tab-dot {
+  position: absolute; bottom: 5px; left: 50%;
+  width: 4px; height: 4px; border-radius: 999px;
+  background: var(--accent);
+  transform: translateX(-50%);
+}
+
+/* ───────── cards & chrome ───────── */
+.card {
+  background: var(--ink-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.card-press { transition: transform .18s cubic-bezier(.2,.9,.3,1.2), border-color .18s; }
+.card-press:active { transform: scale(.985); border-color: var(--line-strong); }
+
+.chip {
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+  font-family: var(--font-sans); font-size: 12px; font-weight: 500; letter-spacing: 0;
+  color: var(--text-mid);
+  border: 1px solid var(--line); border-radius: 999px;
+  padding: 5px 11px; min-height: 30px;
+  user-select: none; -webkit-user-select: none;
+}
+.chip-accent { color: var(--accent); border-color: var(--accent-glow); background: var(--accent-soft); }
+
+/* quiet round button — the only persistent button shape on the play surface */
+.icon-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  min-width: 34px; height: 34px; padding: 0 8px;
+  border-radius: 999px; border: 1px solid transparent;
+  color: var(--text-lo); background: transparent;
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: .05em;
+  transition: color .15s, background .15s, border-color .15s;
+  user-select: none; -webkit-user-select: none; flex-shrink: 0;
+}
+.icon-btn:active { background: var(--ink-2); }
+.icon-btn[disabled] { opacity: .35; pointer-events: none; }
+.icon-btn.lit { color: var(--accent); }
+
+/* ───────── prose stream ───────── */
+.prose-stream { max-width: 42rem; margin: 0 auto; }
+.prose-stream p {
+  /* Explicit now that body is sans: the narrative is the one place a reading serif belongs, and it
+     is the whole reason Newsreader is loaded. */
+  font-family: var(--font-prose);
+  margin: 0 0 1.05em;
+  font-size: 17.5px;
+  line-height: 1.66;
+  color: var(--text-hi);
+  animation: rise .5s cubic-bezier(.16,.84,.3,1) both;
+}
+@keyframes rise {
+  from { opacity: 0; transform: translateY(7px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.player-echo {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--accent);
+  border-left: 2px solid var(--accent-glow);
+  padding: 2px 0 2px 12px;
+  margin: 1.4em 0 1.1em;
+  opacity: .92;
+}
+/* your LATEST message reads as a bubble — immediately findable in the stream; older
+   echoes stay quiet marginalia so history doesn't turn into a chat log */
+.player-echo.latest {
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-glow);
+  border-left: 2px solid var(--accent);
+  border-radius: 12px;
+  padding: 8px 12px;
+  opacity: 1;
+}
+/* the in-flight bubble pulses very gently while the world is still answering */
+.player-echo.live { animation: echoWait 2.2s ease-in-out infinite; }
+@keyframes echoWait {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .72; }
+}
+/* echo-nav landing flash: the eye goes where the scroll went */
+.player-echo.flash { animation: echoFlash 1.35s ease-out; border-radius: 12px; }
+@keyframes echoFlash {
+  0% { background: var(--accent-glow); box-shadow: 0 0 0 4px var(--accent-soft); }
+  100% { box-shadow: none; }
+}
+.echo-nav {
+  width: 30px; min-width: 30px; height: 24px; padding: 0;
+  border: 1px solid var(--line);
+  color: var(--text-lo);
+}
+.echo-nav:active { background: var(--ink-2); }
+.echo-nav[disabled] { opacity: .3; pointer-events: none; }
+
+/* ───────── inputs ───────── */
+.field, .composer-input {
+  width: 100%;
+  background: var(--ink-1);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  color: var(--text-hi);
+  font-family: var(--font-sans);
+  font-size: 16px;            /* prevents iOS zoom-on-focus */
+  padding: 12px 14px;
+  outline: none;
+  transition: border-color .15s;
+}
+.field:focus, .composer-input:focus { border-color: var(--accent-glow); }
+textarea.field, textarea.composer-input { resize: none; }
+
+/* iOS-native-feeling range slider (montage days) */
+input[type="range"] {
+  -webkit-appearance: none; appearance: none;
+  height: 28px; background: transparent; cursor: pointer;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 3px; border-radius: 999px; background: var(--ink-3);
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 22px; height: 22px; border-radius: 999px;
+  background: var(--text-hi); border: none;
+  margin-top: -9.5px;
+  box-shadow: 0 1px 6px rgba(0,0,0,.5);
+}
+input[type="range"]::-moz-range-track { height: 3px; border-radius: 999px; background: var(--ink-3); }
+input[type="range"]::-moz-range-thumb { width: 22px; height: 22px; border-radius: 999px; background: var(--text-hi); border: none; }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  font-family: var(--font-sans); font-size: 13.5px; font-weight: 500; letter-spacing: 0;
+  border-radius: 12px; padding: 11px 16px;
+  border: 1px solid var(--line-strong);
+  color: var(--text-hi); background: var(--ink-3);
+  transition: transform .15s cubic-bezier(.2,.9,.3,1.3), background .15s, opacity .15s;
+  user-select: none; -webkit-user-select: none;
+}
+.btn:active { transform: scale(.96); }
+.btn[disabled] { opacity: .4; pointer-events: none; }
+/* Compact button for inline rows inside a card, where a full .btn is too heavy. This was being used
+   before it existed — the authored-want controls asked for .btn-sm and got no styling at all, so a
+   row of buttons rendered as a row of plain text. */
+.btn-sm {
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  font-family: var(--font-sans); font-size: 12.5px; font-weight: 500; letter-spacing: 0;
+  border-radius: 9px; padding: 6px 11px;
+  border: 1px solid var(--line-strong);
+  color: var(--text-hi); background: var(--ink-3);
+  transition: transform .15s cubic-bezier(.2,.9,.3,1.3), background .15s, opacity .15s;
+  user-select: none; -webkit-user-select: none;
+}
+.btn-sm:active { transform: scale(.96); }
+.btn-sm[disabled] { opacity: .4; pointer-events: none; }
+.btn-accent { background: var(--accent); color: var(--ink-0); border-color: transparent; font-weight: 600; }
+.btn-ghost  { background: transparent; border-color: var(--line); color: var(--text-mid); }
+.btn-danger { background: transparent; border-color: rgba(207,90,78,.45); color: var(--danger); }
+
+/* meters */
+.meter { height: 5px; border-radius: 999px; background: var(--ink-3); overflow: hidden; }
+.meter > div { height: 100%; border-radius: 999px; background: var(--accent); transition: width .6s cubic-bezier(.2,.8,.2,1); }
+
+/* scrollbars away on mobile feel */
+.scroll-y { overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+.scroll-y::-webkit-scrollbar { width: 0; height: 0; }
+
+/* ───────── sheets & drawers ───────── */
+.drawer-veil { background: rgba(6,5,3,.6); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
+.drawer {
+  background: var(--ink-1);
+  border-top: 1px solid var(--line-strong);
+  border-radius: 22px 22px 0 0;
+  padding-left: max(env(safe-area-inset-left), 0px);
+  padding-right: max(env(safe-area-inset-right), 0px);
+  padding-bottom: max(env(safe-area-inset-bottom), 16px);
+  box-shadow: 0 -18px 50px rgba(0,0,0,.5);
+  max-height: 82%;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.grab { width: 36px; height: 4px; border-radius: 999px; background: var(--line-strong); margin: 10px auto 4px; }
+
+/* overflow-menu sheet rows — every rare action, one clean list */
+.sheet-item {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%; text-align: left;
+  padding: 12px 10px; min-height: 48px;
+  border-radius: 12px;
+  color: var(--text-hi);
+  transition: background .15s;
+  user-select: none; -webkit-user-select: none;
+}
+.sheet-item:active { background: var(--ink-2); }
+.sheet-item[disabled] { opacity: .4; pointer-events: none; }
+.sheet-item .sheet-ic {
+  display: flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; border-radius: 10px; flex-shrink: 0;
+  background: var(--ink-2); color: var(--text-mid);
+}
+.sheet-item .sheet-ic.lit { color: var(--accent); background: var(--accent-soft); }
+.sheet-label { font-size: 14.5px; line-height: 1.25; }
+.sheet-hint { font-size: 11.5px; color: var(--text-lo); line-height: 1.3; }
+.sheet-rule { height: 1px; background: var(--line); margin: 6px 4px; }
+.sheet-cap {
+  font-family: var(--font-mono); font-size: 9px; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--text-lo); padding: 8px 10px 2px;
+}
+
+/* thinking shimmer */
+.shimmer {
+  background: linear-gradient(90deg, var(--text-lo) 25%, var(--text-hi) 50%, var(--text-lo) 75%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text; background-clip: text;
+  color: transparent;
+  animation: shimmer 1.6s linear infinite;
+}
+@keyframes shimmer { to { background-position: -200% 0; } }
+
+hr.rule { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
+
+/* ───────── light mode ───────── */
+[data-mode="light"] {
+  --ink-0: #f4efe5;
+  --ink-1: #ece6d8;
+  --ink-2: #e3dbc9;
+  --ink-3: #d6cbb4;
+  --line: rgba(60, 45, 25, 0.12);
+  --line-strong: rgba(60, 45, 25, 0.22);
+  --text-hi: #2b2317;
+  --text-mid: #5d5240;
+  --text-lo: #877a63;
+}
+[data-mode="light"] .drawer-veil { background: rgba(40,30,15,.32); }
+
+/* ───────── the guides ─────────
+   Four panels around a hole, so the spotlit control is the one part of the page still in focus.
+   The veil follows the drawer's convention: heavy on dark, gentle on light. */
+.coach-scrim {
+  position: fixed;
+  background: rgba(6, 5, 3, .84);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+}
+[data-mode="light"] .coach-scrim { background: rgba(40, 30, 15, .46); }
+
+/* ───────── prose inks (readable registers) ───────── */
+.prose-stream .dlg {
+  color: var(--accent);
+  font-style: italic;
+}
+.prose-stream .name-ref {
+  color: var(--text-hi);
+  border-bottom: 1px dotted var(--accent-glow);
+  cursor: pointer;
+  font-variant-caps: small-caps;
+  letter-spacing: .02em;
+}
+
+/* tooltip card */
+.tip-veil { position: fixed; inset: 0; z-index: 60; }
+.tip-card {
+  position: fixed; z-index: 61;
+  width: min(300px, calc(100vw - 32px));
+  background: var(--ink-1);
+  border: 1px solid var(--accent-glow);
+  border-radius: 14px;
+  padding: 12px 14px;
+  box-shadow: 0 18px 50px rgba(0,0,0,.55);
+}
+.tip-kicker {
+  font-family: var(--font-mono); font-size: 9px; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--accent);
+}
+
+/* toast */
+.toast-stack { position: fixed; top: calc(env(safe-area-inset-top) + 52px); left: 0; right: 0; z-index: 55; pointer-events: none; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.toast {
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: .04em;
+  color: var(--text-hi);
+  background: color-mix(in srgb, var(--ink-1) 90%, transparent);
+  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+  border: 1px solid var(--accent-glow);
+  border-radius: 999px; padding: 7px 16px;
+  box-shadow: 0 8px 30px rgba(0,0,0,.4);
+}
+
+/* segmented mode control */
+.seg { display: flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--ink-1); }
+.seg button {
+  flex: 1; padding: 8px 0; min-height: 34px;
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--text-lo);
+}
+.seg button.on { background: var(--accent-soft); color: var(--accent); }
+
+/* shifts disclosure */
+.shift-line { display: flex; gap: 8px; align-items: baseline; font-family: var(--font-mono); font-size: 11px; line-height: 1.6; color: var(--text-mid); }
+.shift-line::before { content: "◆"; color: var(--accent); font-size: 8px; }
+
+details.shifts > summary { list-style: none; cursor: pointer; }
+details.shifts > summary::-webkit-details-marker { display: none; }
+
+.portrait {
+  width: 100%; aspect-ratio: 1; object-fit: cover;
+  border-radius: 14px; border: 1px solid var(--line-strong);
+}
+.scene-img { width: 100%; border-radius: 14px; border: 1px solid var(--line); margin: 8px 0 14px; }
+
+/* ───────── interludes: the world turned without you ───────── */
+.interlude { text-align: center; }
+.interlude-rule {
+  display: flex; align-items: center; gap: 12px;
+  margin: 10px 0;
+  font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .18em; text-transform: uppercase;
+  color: var(--accent);
+}
+.interlude-rule::before, .interlude-rule::after {
+  content: ""; flex: 1; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent-glow), transparent);
+}
+.interlude-prose {
+  font-style: italic;
+  font-size: 15.5px !important;
+  line-height: 1.7 !important;
+  color: var(--text-mid) !important;
+  text-align: left;
+  margin: 0 0 1em;
+}
+
+/* ───────── ambient & state-driven motion ───────── */
+
+/* per-word prose reveal — cadence set inline from scene tone */
+@keyframes wordIn {
+  from { opacity: 0; transform: translateY(3px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.w-in { display: inline-block; opacity: 0; animation: wordIn var(--w-dur, .42s) cubic-bezier(.2,.8,.3,1) both; }
+
+/* openness orb — the relaxation scalar, breathing. Period + depth set inline. */
+@keyframes breathe {
+  0%, 100% { transform: scale(1); opacity: .8; }
+  50%      { transform: scale(var(--breath-amp, 1.12)); opacity: 1; }
+}
+.breath-orb {
+  width: 11px; height: 11px; border-radius: 999px; flex-shrink: 0;
+  animation: breathe var(--breath-s, 4s) ease-in-out infinite;
+}
+
+/* strike — the veto lands as a red flash that decays */
+@keyframes strikeFlash { 0% { opacity: 0; } 10% { opacity: 1; } 100% { opacity: 0; } }
+.fx-strike {
+  position: fixed; inset: 0; z-index: 80; pointer-events: none;
+  background: radial-gradient(115% 100% at 50% 50%, transparent 42%, rgba(207, 90, 78, .38));
+  animation: strikeFlash .9s ease-out both;
+}
+
+/* canon — a world-altering fact ripples outward once */
+@keyframes canonRipple {
+  from { opacity: .85; transform: scale(.15); }
+  to   { opacity: 0;   transform: scale(1.5); }
+}
+.fx-canon { position: fixed; inset: 0; z-index: 80; pointer-events: none; display: flex; align-items: center; justify-content: center; }
+.fx-canon::before {
+  content: ""; width: 46vmin; height: 46vmin; border-radius: 999px;
+  border: 1.5px solid var(--accent); box-shadow: 0 0 70px var(--accent-glow);
+  animation: canonRipple 1.15s cubic-bezier(.2,.8,.3,1) both;
+}
+
+/* story map — "you are here" pulse and newest-edge draw-in */
+@keyframes youPulse { from { r: 5; opacity: .8; } to { r: 13; opacity: 0; } }
+.map-you { animation: youPulse 2.4s ease-out infinite; }
+@keyframes edgeDraw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+.map-edge-new { stroke-dasharray: 1; animation: edgeDraw 1.2s cubic-bezier(.2,.8,.3,1) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .w-in, .breath-orb, .fx-strike, .fx-canon::before, .map-you, .map-edge-new { animation: none !important; opacity: 1; }
+  .map-you { opacity: .5; }
+  .fx-strike, .fx-canon { display: none; }
+}
+
+/* ── ledger card — the measurable deltas of the latest turn, as marginalia ── */
+.ledger-card {
+  margin: 14px 0 18px; padding: 8px 0 8px 14px;
+  border-left: 2px solid var(--line);
+  display: flex; flex-direction: column; gap: 5px;
+}
+.ledger-row {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  font-family: var(--font-mono); font-size: 11.5px; line-height: 1.5;
+}
+.ledger-text { color: var(--text-mid); letter-spacing: .02em; }
+.ledger-delta { color: var(--text-lo); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ledger-arrow { color: var(--text-lo); opacity: .6; }
+
+/* ── tap-to-reveal per-turn actions — no permanent button rows ── */
+.turn-actions {
+  display: flex; align-items: center; gap: 6px; overflow: hidden;
+  margin: 2px 0 6px;
+}
+.turn-action {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--text-lo);
+  padding: 7px 11px; min-height: 36px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--ink-1);
+  transition: color .2s, border-color .2s;
+}
+.turn-action:disabled { opacity: .5; }
+.turn-action:active { border-color: var(--text-lo); }
+
+/* ── offscreen turns stop rendering entirely — the scroll-weight fix on long histories.
+      The latest turn is exempt (see Play.tsx) so streaming prose and scroll anchoring stay exact. ── */
+.turn-block { content-visibility: auto; contain-intrinsic-size: auto 380px; }
+
+/* ── readability floor ──────────────────────────────────────────────────────
+   The ambient canvases sit behind the prose, but the prose column had no ground
+   of its own — fog and particles read as sitting ON the words. Legibility is a
+   floor, not a tone choice: a soft scrim of the page's own colour keeps ambience
+   behind the writing, in either theme. */
+.prose-scrim {
+  position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  background: linear-gradient(
+    to right,
+    transparent 0%,
+    color-mix(in srgb, var(--ink-0) 80%, transparent) 6%,
+    color-mix(in srgb, var(--ink-0) 80%, transparent) 94%,
+    transparent 100%);
+}
+@supports not (background: color-mix(in srgb, red 50%, transparent)) {
+  .prose-scrim { background: none; }
+}
+
+/* ── previously, here — place-indexed recall on re-entry (not persistent chrome) ── */
+.recall-card {
+  margin: 0 0 16px; padding: 9px 0 9px 14px;
+  border-left: 2px solid var(--accent-glow, var(--line));
+  overflow: hidden;
+}
+.recall-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--text-lo); margin-bottom: 4px;
+}
+.recall-line { font-size: 13px; line-height: 1.55; color: var(--text-mid); }
+.recall-when { font-family: var(--font-mono); font-size: 10px; color: var(--text-lo); }
+
+/* ── due soon — scheduled consequences at the door. Appears only when pending. ── */
+.duesoon { padding: 0 16px 4px; display: flex; flex-direction: column; gap: 3px; }
+.duesoon-row {
+  display: flex; align-items: baseline; gap: 8px;
+  font-family: var(--font-mono); font-size: 10.5px; line-height: 1.5;
+}
+.duesoon-when { letter-spacing: .06em; white-space: nowrap; }
+.duesoon-text {
+  color: var(--text-mid); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: var(--font-sans); font-size: 11.5px;
+}
+.duesoon-mine {
+  font-size: 8.5px; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--accent); opacity: .8; white-space: nowrap;
+}
