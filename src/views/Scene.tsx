@@ -35,10 +35,10 @@ import { Fill, Lightbox, Photo } from "../ui/kit";
  */
 
 const MODES: { id: ActionMode; label: string; hint: string }[] = [
-  { id: "do", label: "Do", hint: "You act. Plain text is a physical action." },
-  { id: "say", label: "Say", hint: "You speak. Everyone in the room hears it." },
-  { id: "think", label: "Think", hint: "Sealed. Nobody perceives it and nobody reacts to it." },
-  { id: "story", label: "Write", hint: "You write the world, not your character." },
+  { id: "do", label: "Do", hint: "Whatever you type here is something you physically do." },
+  { id: "say", label: "Say", hint: "This gets said out loud, so anyone nearby can hear it." },
+  { id: "think", label: "Think", hint: "Just for you — nobody in the scene knows you thought it, so nobody reacts to it." },
+  { id: "story", label: "Write", hint: "For writing the world around you rather than your own character." },
 ];
 
 export default function Scene({ save, setSave, onOpenSpine }: {
@@ -421,7 +421,7 @@ function Composer({
       </div>
       <div className="ui" style={{ fontSize: 11, color: "var(--ink-faint)", marginTop: 7, lineHeight: 1.5 }}>
         {busy ? (phase || "writing…")
-          : `"quotes" are spoken · *asterisks* are sealed thought · everything else is what you do`}
+          : `You can mix these in one message — anything in "quotes" gets said out loud, anything in *asterisks* stays in your head, and the rest is what you do.`}
       </div>
     </div>
   );

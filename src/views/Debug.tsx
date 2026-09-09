@@ -53,10 +53,11 @@ export default function Debug({ save, setSave, onEdit, onPlay }: {
     <div className="scroll fade-top" style={{ height: "100%", padding: "50px 20px 60px" }}>
       <div style={{ maxWidth: 620, margin: "0 auto" }}>
         <div className="label label-accent" style={{ marginBottom: 8 }}>Console</div>
-        <h1 className="display" style={{ fontSize: 32, marginBottom: 10 }}>Reach in.</h1>
+        <h1 className="display" style={{ fontSize: 32, marginBottom: 10 }}>The console</h1>
         <p className="ui" style={{ color: "var(--ink-lo)", fontSize: 12.5, lineHeight: 1.6, marginBottom: 30, maxWidth: 440 }}>
-          It is your save, on your key, in your browser. Nothing here is withheld and nothing here is
-          undone for you — a few of these are one-way and they say so.
+          This is all here because it's your save and it's already sitting in your browser, so there
+          was no sense hiding any of it behind a wall. A few of these can't be undone, and those ones
+          say so where they are.
         </p>
 
         {/* ── STATE READ-OUT ────────────────────────────────────────────── */}

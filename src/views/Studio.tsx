@@ -74,7 +74,7 @@ export default function Studio({ save, setSave, onClose }: {
     <div className="scroll fade-top" style={{ height: "100%", padding: "74px 20px 60px" }}>
       <div style={{ maxWidth: 560, margin: "0 auto" }}>
         <div className="label label-accent" style={{ marginBottom: 8 }}>Studio</div>
-        <h1 className="display" style={{ fontSize: 32, marginBottom: 28 }}>How it runs.</h1>
+        <h1 className="display" style={{ fontSize: 32, marginBottom: 28 }}>Models and settings</h1>
 
         <Mark>The key</Mark>
         <Field label="OpenRouter key" value={key} onChange={setKey} type="password"
