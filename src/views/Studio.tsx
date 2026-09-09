@@ -5,6 +5,7 @@ import { settings as saveSettings, editSave, editHeat, load } from "../game/api"
 import { type Save } from "../game/types";
 import { EXPLICITNESS, type Explicitness } from "../game/appetite";
 import { Field, Mark } from "../ui/kit";
+import { ModelPicker } from "../ui/ModelPicker";
 import { ticRate } from "../game/tics";
 
 /**
@@ -81,14 +82,11 @@ export default function Studio({ save, setSave, onClose }: {
           hint="Stored in this browser and sent to openrouter.ai and nowhere else. There is no server here to keep it on. Get one at openrouter.ai/keys." />
 
         <Mark>Who writes it</Mark>
-        <Field label="Narrator — the prose, and the whole cost" value={narr} onChange={setNarr}
-          hint="The long creative call, once a turn. Everything you read comes from here." />
-        <Field label="Bookkeeper — the world, and the small work" value={sim} onChange={setSim}
-          hint="Strict JSON every turn, plus the chapter openings, the gate check and the doors. Wants a small fast model, not a clever one." />
+        <ModelPicker label="Narrator — the prose" role="narrator" value={narr} onChange={setNarr} />
+        <ModelPicker label="Bookkeeper — the world, and the small work" role="bookkeeper" value={sim} onChange={setSim} />
 
         <Mark>How it looks</Mark>
-        <Field label="Image model" value={img} onChange={setImg}
-          hint="Portraits and scene pictures. Gemini's flash-image family accepts the portraits as references, so the cast stays recognisable between scenes." />
+        <ModelPicker label="Image model" role="image" value={img} onChange={setImg} />
         <Field label="Art direction" value={art} onChange={setArt}
           hint="Set once, governs everything drawn." />
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: -12, marginBottom: 26 }}>

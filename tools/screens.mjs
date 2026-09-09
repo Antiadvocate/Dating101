@@ -165,6 +165,13 @@ for (const [tag, w, h] of [["wide", 1280, 860], ["phone", 402, 800]]) {
   await shot(page, `${tag}-5-dossier`, true);
   await page.locator('button[title="studio"]').click();
   await shot(page, `${tag}-6-studio`, true);
+  // The model picker, opened from the studio. Worth photographing on the
+  // failure path too: this sandbox cannot reach openrouter.ai, so what these
+  // shots actually prove is that the fallback list is usable.
+  await page.locator('[data-model-picker="narrator"]').click();
+  await shot(page, `${tag}-13-models`);
+  await page.locator('button[aria-label="close"]').click();
+  await page.waitForTimeout(300);
   await page.locator('button[title="console"]').click();
   await shot(page, `${tag}-9-console`, true);
   await page.getByText("Open the editor").click();

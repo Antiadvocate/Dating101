@@ -8,6 +8,7 @@ import type { Brief, CastingInput } from "../game/casting";
 import { ACCENT_HEX, ACCENT_NAMES, ROUTE_ACCENTS } from "../game/types";
 import { EXPLICITNESS, KINK_GROUPS, type Explicitness } from "../game/appetite";
 import { Field, Mark } from "../ui/kit";
+import { ModelPicker } from "../ui/ModelPicker";
 
 /**
  * CASTING — one question per page.
@@ -275,8 +276,7 @@ export default function Casting({ onBack, onCast }: {
                   ))}
                 </div>
                 <Mark>The forge</Mark>
-                <Field label="Model that builds the world" value={model} onChange={setModel}
-                  hint="One call, and it decides the quality of everything after it. Worth the good model even if you play on a cheap one." />
+                <ModelPicker label="Model that builds the world" role="forge" value={model} onChange={setModel} />
                 <button className="chip" data-on={ground ? "true" : "false"} onClick={() => setGround(!ground)}>
                   {ground ? "◉" : "○"} ground it with a web search
                 </button>
