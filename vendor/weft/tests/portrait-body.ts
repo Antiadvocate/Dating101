@@ -1,0 +1,345 @@
+/* Smoke test: portrait body plan — non-human characters must not be painted as people.
+ * The image model never sees our state; the prompt is the whole game. The prompt must not
+ * assert personhood for a character whose body isn't a whole person — whether that's a
+ * flower, an insect, a tree, an orb, or literally just a hand. */
+import { newSave, registerCharacter, blankCondition } from "../src/engine/state";
+import { buildPortraitPrompt, buildScenePrompt, sceneReferencePortraits, charCard, volatileDigest, NARRATOR_SYSTEM, NARRATOR_SYSTEM_LEAN } from "../src/engine/prompts";
+import type { SaveState } from "../src/engine/types";
+
+function makeState(): SaveState {
+  return newSave("portrait-test", {
+    name: "Test World", era: "far future", technology_level: "mixed", magic_rules: "none",
+    forbidden: "", what_people_fear: "nothing", cultures_and_languages: "english",
+    climate_and_geography: "mild", calendar_and_currency: "standard", political_situation: "stable",
+  } as any);
+}
+
+let pass = 0, fail = 0;
+function check(name: string, cond: boolean, extra?: unknown) {
+  if (cond) { pass++; console.log(`ok   ${name}`); }
+  else { fail++; console.log(`FAIL ${name}`, extra ?? ""); }
+}
+const NOT_PERSON = "not an ordinary person";
+const PERSON = "a person caught being themselves";
+
+/* 1. ordinary human → humanoid framing, no anti-person directive */
+{
+  const s = makeState();
+  const id = registerCharacter(s, {
+    name: "Mara Voss", age: 54,
+    appearance_facts: "a wiry woman in her fifties, grey eyes, close-cropped hair, sun-lined skin",
+    background: "a retired cartographer",
+  } as any);
+  const p = buildPortraitPrompt(s, id);
+  check("human: person framing kept", p.includes(PERSON));
+  check("human: full-body head-to-toe composition", p.includes("head to toe"));
+  check("human: no not-a-person directive", !p.includes(NOT_PERSON));
+}
+
+/* 2. canon species, invented word, flower body → non-person framing + canon gloss */
+{
+  const s = makeState();
+  s.world.canon.push("Leptoids are giant flowers with silver petals and a slow, patient intelligence.");
+  const id = registerCharacter(s, {
+    name: "Vel", age: 30,
+    appearance_facts: "A giant flower: silver petals in a tight spiral, a thick ribbed stem, roots coiled around a pot of dark soil.",
+    background: "a leptoid botanist",
+  } as any);
+  const p = buildPortraitPrompt(s, id);
+  check("flower: not-a-person directive present", p.includes(NOT_PERSON), p.slice(0, 300));
+  check("flower: canon gloss supplied", p.includes("Leptoids — giant flowers with silver petals"), p.slice(0, 400));
+  check("flower: no human body requests", !p.includes("what their hands do") && !p.includes("head to toe") && !p.includes("viewer"));
+  check("flower: appearance still leads", p.indexOf("Appearance:") < p.indexOf("Vertical portrait"), p.slice(0, 200));
+}
+
+/* 3. alien species that looks human → humanoid branch wins on anchors */
+{
+  const s = makeState();
+  s.world.canon.push("Aelari are an ancient people known for their long memories.");
+  const id = registerCharacter(s, {
+    name: "Seth", age: 41,
+    appearance_facts: "a tall man with silver-streaked hair and sharp cheekbones",
+    background: "an aelari scholar",
+  } as any);
+  const p = buildPortraitPrompt(s, id);
+  check("human-looking alien: humanoid framing", p.includes(PERSON), p.slice(0, 300));
+  check("human-looking alien: no not-a-person directive", !p.includes(NOT_PERSON));
+}
+
+/* 4. negations are scrubbed: "no face, no hands, no eyes" must not read as human anatomy */
+{
+  const s = makeState();
+  const id = registerCharacter(s, {
+    name: "Bloom", age: 12,
+    appearance_facts: "Silver petals in a tight spiral over a ribbed stem; no face, no hands, no eyes.",
+    background: "a walking bloom",
+  } as any);
+  const p = buildPortraitPrompt(s, id);
+  check("negated anatomy: not-a-person directive present", p.includes(NOT_PERSON), p.slice(0, 300));
+}
+
+/* 5. no canon, no anchors → still non-person, just without a gloss */
+{
+  const s = makeState();
+  const id = registerCharacter(s, {
+    name: "The Orb", age: 300,
+    appearance_facts: "a sphere of black glass, warm to the touch, humming faintly",
+    background: "an artifact that thinks",
+  } as any);
+  const p = buildPortraitPrompt(s, id);
+  check("anchor-less: not-a-person directive present", p.includes(NOT_PERSON), p.slice(0, 300));
+}
+
+/* 6. mood line adapts to the body plan */
+{
+  const s = makeState();
+  const human = registerCharacter(s, {
+    name: "Ivo", age: 28, appearance_facts: "a broad man with a broken nose and kind eyes", background: "a dockworker",
+  } as any);
+  const plant = registerCharacter(s, {
+    name: "Fern", age: 9, appearance_facts: "a spray of green fronds in a clay pot", background: "a potted companion",
+  } as any);
+  s.condition[human] = blankCondition();
+  s.condition[human].psyche.mood = "calm";
+  s.condition[plant] = blankCondition();
+  s.condition[plant].psyche.mood = "calm";
+  const ph = buildPortraitPrompt(s, human);
+  const pp = buildPortraitPrompt(s, plant);
+  check("human mood: expression language", ph.includes("Expression carries: calm"));
+  check("non-human mood: form language", pp.includes("Current state: calm"), pp.slice(0, 400));
+}
+
+/* 7. insect alien with canon gloss — "eyes" in the description must not force personhood */
+{
+  const s = makeState();
+  s.world.canon.push("Vess are mantis-like insects the size of a child, with chitin plates and compound eyes.");
+  const id = registerCharacter(s, {
+    name: "Kik", age: 7,
+    appearance_facts: "a mantis-like insect with compound eyes and iridescent chitin plates",
+    background: "a vess scout",
+  } as any);
+  const p = buildPortraitPrompt(s, id);
+  check("insect: not-a-person directive present", p.includes(NOT_PERSON), p.slice(0, 400));
+  check("insect: canon gloss supplied", p.includes("Vess — mantis-like insects"), p.slice(0, 400));
+}
+
+/* 8. literally just a hand — human-derived, but not a person */
+{
+  const s = makeState();
+  const id = registerCharacter(s, {
+    name: "Thing", age: 40,
+    appearance_facts: "a disembodied human hand, pale and quick, with old scars across the knuckles",
+    background: "a helpful companion",
+  } as any);
+  const p = buildPortraitPrompt(s, id);
+  check("the hand: not-a-person directive present", p.includes(NOT_PERSON), p.slice(0, 400));
+  check("the hand: kind gloss from declaration", p.includes("disembodied human hand"), p.slice(0, 400));
+  check("the hand: no full-person composition", !p.includes("head to toe"), p.slice(0, 200));
+}
+
+/* 9. a tree */
+{
+  const s = makeState();
+  const id = registerCharacter(s, {
+    name: "Old Root", age: 400,
+    appearance_facts: "a great oak with gnarled bark and a hollow at its base",
+    background: "the oldest living thing in the valley",
+  } as any);
+  const p = buildPortraitPrompt(s, id);
+  check("tree: not-a-person directive present", p.includes(NOT_PERSON), p.slice(0, 300));
+}
+
+/* 10. abstract / spectral — signal word forces non-person even with "figure" */
+{
+  const s = makeState();
+  const id = registerCharacter(s, {
+    name: "The Guest", age: 999,
+    appearance_facts: "a spectral figure in dark robes, translucent at the edges",
+    background: "something that visits",
+  } as any);
+  const p = buildPortraitPrompt(s, id);
+  check("spectral: not-a-person directive present", p.includes(NOT_PERSON), p.slice(0, 300));
+}
+
+/* 11. human regressions: roles and feature-lists and metonyms stay persons */
+{
+  const s = makeState();
+  const soldier = registerCharacter(s, {
+    name: "Dain", age: 33, appearance_facts: "a soldier with grey eyes and a scarred jaw", background: "a veteran",
+  } as any);
+  const features = registerCharacter(s, {
+    name: "Petra", age: 27, appearance_facts: "tall, freckled, with a crooked grin", background: "a messenger",
+  } as any);
+  const metonym = registerCharacter(s, {
+    name: "Hale", age: 60, appearance_facts: "a firm handshake and an easy smile", background: "a neighbor",
+  } as any);
+  check("role declaration: person", buildPortraitPrompt(s, soldier).includes(PERSON), buildPortraitPrompt(s, soldier).slice(0, 300));
+  check("feature list: person", buildPortraitPrompt(s, features).includes(PERSON), buildPortraitPrompt(s, features).slice(0, 300));
+  check("metonym: person", buildPortraitPrompt(s, metonym).includes(PERSON), buildPortraitPrompt(s, metonym).slice(0, 300));
+}
+
+/* 12. empty appearance → human default (most characters are people) */
+{
+  const s = makeState();
+  const id = registerCharacter(s, { name: "Noel", age: 45, background: "a quiet clerk" } as any);
+  const p = buildPortraitPrompt(s, id);
+  check("empty appearance: human default", p.includes(PERSON));
+}
+
+/* 13. explicit "Not a human" LEADING the description — the reported failure */
+{
+  const s = makeState();
+  const id = registerCharacter(s, {
+    name: "Lefty", age: 40,
+    appearance_facts: "Not a human. A severed foot, pale, with crooked toes.",
+    background: "a helpful companion",
+  } as any);
+  const p = buildPortraitPrompt(s, id);
+  check("leading 'not a human': not-a-person directive present", p.includes(NOT_PERSON), p.slice(0, 400));
+  check("leading 'not a human': declaration gloss harvested", p.includes("severed foot"), p.slice(0, 400));
+}
+
+/* 14. explicit statement ANYWHERE, even with anatomy words that would otherwise force a person */
+{
+  const s = makeState();
+  const id = registerCharacter(s, {
+    name: "Stepper", age: 12,
+    appearance_facts: "rough skin, crooked toes, a thick sole — not a human",
+    background: "a companion",
+  } as any);
+  const p = buildPortraitPrompt(s, id);
+  check("trailing 'not a human' beats 'skin': not-a-person directive", p.includes(NOT_PERSON), p.slice(0, 400));
+}
+
+/* 15. explicit statement in the BACKGROUND also counts */
+{
+  const s = makeState();
+  const id = registerCharacter(s, {
+    name: "Padfoot", age: 5,
+    appearance_facts: "a leathery foot with flat toes",
+    background: "not a human",
+  } as any);
+  const p = buildPortraitPrompt(s, id);
+  check("'not a human' in background: not-a-person directive", p.includes(NOT_PERSON), p.slice(0, 400));
+}
+
+/* 16. Podia regression: feature-only foot anatomy ("skin" present, no declaration, no species
+ *     word in the identity) must still read as a non-person body */
+{
+  const s = makeState();
+  s.world.canon.push("Every Podian is a single consciousness inhabiting two feet—a Left and a Right—that move together in perfect sync.");
+  const id = registerCharacter(s, {
+    name: "Tessa", age: 34,
+    appearance_facts: "Pale ivory skin with a cooler, bluish undertone; toes shorter and more muscular; a bold geometric arch tattoo in black ink; always wears a polished brass ankle cuff",
+    background: "A sitting representative on the Council of High Arches, elected on a reformist platform.",
+  } as any);
+  const p = buildPortraitPrompt(s, id);
+  check("feature-only foot: not-a-person directive", p.includes(NOT_PERSON), p.slice(0, 400));
+  check("feature-only foot: no full-person composition", !p.includes("head to toe"));
+}
+
+/* 17. "Every X is…" canon pattern supplies the gloss when the identity names the species */
+{
+  const s = makeState();
+  s.world.canon.push("Every Podian is a single consciousness inhabiting two feet—a Left and a Right—that move together in perfect sync.");
+  const id = registerCharacter(s, {
+    name: "Oren", age: 27,
+    appearance_facts: "Pale ivory skin; smaller and more compact than most Podians; toes short and neat",
+    background: "An apprentice silt-chef.",
+  } as any);
+  const p = buildPortraitPrompt(s, id);
+  check("'Every X is' gloss supplied", p.includes("Podian — a single consciousness inhabiting two feet"), p.slice(0, 400));
+}
+
+/* 18. non-person composition carries the negative guard */
+{
+  const s = makeState();
+  const id = registerCharacter(s, {
+    name: "Bloom2", age: 3, appearance_facts: "a spray of white petals on a mossy stem", background: "a garden speaker",
+  } as any);
+  const p = buildPortraitPrompt(s, id);
+  check("negative guard: no people, no human figure", p.includes("no people") && p.includes("no human figure"), p.slice(0, 400));
+}
+
+/* 19. scene illustrations: the cast is NAMED AND DESCRIBED, non-humans carry the body law,
+ *     and creature substitutes are barred (the gremlin clause) */
+{
+  const s = makeState();
+  s.world.canon.push("Leptoids are giant flowers with silver petals.");
+  registerCharacter(s, { name: "Rabi", character_id: "char_player", appearance_facts: "a broad man with a broken nose and kind eyes" } as any);
+  const vel = registerCharacter(s, {
+    name: "Vel", age: 30,
+    appearance_facts: "A giant flower: silver petals in a tight spiral, a thick ribbed stem.",
+    background: "a leptoid botanist",
+  } as any);
+  s.world.present = [vel];
+  const p = buildScenePrompt(s, "She went very still when his hands closed around her stem.");
+  check("scene: player named and described", p.includes("Rabi") && p.includes("broken nose"), p.slice(0, 600));
+  check("scene: non-human named with gloss and law", p.includes("Vel") && p.includes("Leptoids — giant flowers") && p.includes("NOT a person"), p.slice(0, 900));
+  check("scene: gremlin clause bars creature substitutes", p.includes("no animal or creature standing in for it"));
+  check("scene: no undescribed people allowed", p.includes("no people or creatures beyond those described"));
+  check("scene: human cast member gets no NOT-a-person line", !/- Rabi[^\n]*NOT a person/.test(p), p.slice(0, 600));
+}
+
+/* 20. scene reference portraits: a stale or unstamped portrait of a non-human is never attached */
+{
+  const s = makeState();
+  const human = registerCharacter(s, {
+    name: "Mara2", age: 40, appearance_facts: "a lean woman with grey eyes and short hair", background: "a guard",
+  } as any);
+  const plant = registerCharacter(s, {
+    name: "Vel2", age: 12, appearance_facts: "A giant flower: silver petals in a tight spiral.", background: "a speaker",
+  } as any);
+  s.characters[human].portrait_url = "data:image/png;base64,HUMAN";
+  s.characters[plant].portrait_url = "data:image/png;base64,PLANT";
+  // unstamped (pre-fix) portraits: human kept, non-human dropped
+  let refs = sceneReferencePortraits(s, [human, plant]);
+  check("refs: unstamped human portrait kept", refs.includes("data:image/png;base64,HUMAN"));
+  check("refs: unstamped non-human portrait dropped", !refs.includes("data:image/png;base64,PLANT"));
+  // stamped portraits: matching plan kept
+  s.characters[plant].portrait_plan = "nonhuman";
+  refs = sceneReferencePortraits(s, [human, plant]);
+  check("refs: stamped non-human portrait kept", refs.includes("data:image/png;base64,PLANT"));
+  // plan flip: portrait stamped nonhuman but character now reads human → dropped
+  s.characters[human].portrait_plan = "nonhuman";
+  refs = sceneReferencePortraits(s, [human]);
+  check("refs: mismatched stamp dropped", refs.length === 0);
+}
+
+/* 21. scale anchoring: a non-human's resting size rides every surface, and size-canon joins
+ *     the gloss without swallowing unrelated species lines */
+{
+  const s = makeState();
+  s.world.canon.push("Every Podian is a single consciousness inhabiting two feet—a Left and a Right—that move together in perfect sync.");
+  s.world.canon.push("New Podians are not born but bloomed—they grow as paired feet inside pods on the Mother Trees.");
+  s.world.canon.push("A Podian's height changes dramatically depending on her physical posture.");
+  const id = registerCharacter(s, {
+    name: "Lissa2", age: 34, height_cm: 183, weight_kg: 68,
+    appearance_facts: "not a human or person. A podian. Pale ivory skin; high, elegant instep; toes long and expressive.",
+    background: "a bathhouse keeper",
+  } as any);
+  s.world.present = [id];
+  const pp = buildPortraitPrompt(s, id);
+  check("scale: portrait carries true scale", pp.includes("true scale: 183 cm tall at rest"), pp.slice(0, 500));
+  const sp = buildScenePrompt(s, "test");
+  check("scale: scene cast carries true scale", sp.includes("True scale: 183 cm tall at rest"), sp.slice(0, 900));
+  check("scale: gloss has the size line", sp.includes("height changes dramatically"));
+  check("scale: gloss skips non-size species lines", !sp.includes("Mother Trees"), sp.slice(0, 1200));
+  // narrator surfaces
+  const card = charCard(id, s.characters[id], blankCondition(), [], true, { humanoid: false, kind: "Podian — two feet" });
+  check("scale: card body note holds scale", card.includes("Resting size: 183 cm tall, 68 kg"), card.slice(0, 700));
+  const vd = volatileDigest(s, "I look");
+  check("scale: present form line holds scale", vd.includes("Resting size: 183 cm tall, 68 kg"), vd.match(/form: NOT a human[^\n]*/)?.[0]?.slice(0, 500));
+  check("scale: form line demands contact geometry", vd.includes("work out what can actually reach what"));
+}
+
+/* 22. the narrator law carries the scale-geometry and internal-sensation clauses */
+{
+  check("law: scale is anatomy (full tier)", NARRATOR_SYSTEM.includes("SCALE IS ANATOMY TOO") && NARRATOR_SYSTEM.includes("work out the geometry from the sizes on the record"));
+  check("law: internal sensation obeys anatomy", NARRATOR_SYSTEM.includes("without a chest feels nothing tighten there"));
+  check("law: lean tier carries scale + sensation", NARRATOR_SYSTEM_LEAN.includes("Scale binds too") && NARRATOR_SYSTEM_LEAN.includes("no tightening chest, held breath, or racing pulse"));
+  check("law: final check audits scale", NARRATOR_SYSTEM.includes("no contact written at the wrong scale"));
+}
+
+console.log(`\n${pass} passed, ${fail} failed`);
+process.exit(fail ? 1 : 0);
