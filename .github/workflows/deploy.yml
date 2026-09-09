@@ -1,5 +1,9 @@
 name: Deploy to Pages
 
+# Pushes to main publish automatically. Any other branch can be published on
+# demand from Actions -> Deploy to Pages -> Run workflow -> pick the branch,
+# which is how a work-in-progress branch gets onto the live URL without being
+# merged first.
 on:
   push:
     branches: [main]
