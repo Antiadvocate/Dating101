@@ -47,7 +47,7 @@ const uid = (p: string) => `${p}_${Math.random().toString(36).slice(2, 10)}`;
  * the last rung reads "only if it's genuinely a different model", so handing it
  * the same id disabled the one step most likely to save the call.
  */
-function fb(model: string): string {
+export function fb(model: string): string {
   return model === DEFAULT_MODELS.fallback_model
     ? DEFAULT_MODELS.simulator_model
     : DEFAULT_MODELS.fallback_model;
@@ -127,7 +127,7 @@ export async function openingFor(s: SaveState, model: string): Promise<{ opening
     `WHAT IT IS FOR (never state this on the page): ${beat.job}`,
     beat.heat === "sex" ? `THIS CHAPTER IS A SEX SCENE. Open it underway or a moment from it.${beat.about ? ` It is built around: ${beat.about}.` : ""}` : "",
     beat.heat === "builds" ? `This chapter ends in bed, so open it somewhere close to that rather than at the beginning of the evening.` : "",
-    `WHERE: ${beat.where}`,
+    `WHERE THIS HAPPENS: ${s.world.places[s.world.player_location]?.name ?? beat.where}. Both of them are already there — the state says so. This is the only setting this scene may have. Do not open it anywhere else, and in particular do not open it wherever the previous chapter took place just because that is the location you can see in the recent prose.`,
     `WHEN: ${beat.when}`,
     ``,
     standing(s, arc),
@@ -399,6 +399,70 @@ export async function consequenceFor(
     const out = await complete(
       buildMessages(CONSEQUENCE_SYSTEM, "CONSEQUENCE", volatile, model),
       model, fb(model), false, 900,
+    );
+    return out.text.trim();
+  } catch { return ""; }
+}
+
+/* ── 4c. THE DAYS BETWEEN ────────────────────────────────────────────────────
+ *
+ *  Weft's interlude moves the world: drives get pursued, clocks tick, the cast
+ *  goes where their week says. It is not about any two people in particular, and
+ *  for a dating game that is the whole gap.
+ *
+ *  One save made this plain. The player spent a chapter getting her number,
+ *  asked whether he could text her at four, was told yes, and walked out. Four
+ *  days passed and what came back was bus spray on Rainier Avenue, a floor drain
+ *  backing up at the shop, and rental listings — all of it true, none of it
+ *  about them. The text at four never happened, because nothing in the engine
+ *  was responsible for anything happening between two people who were not in a
+ *  room together.
+ *
+ *  This is. It runs after the interlude and writes what actually passed between
+ *  them, then goes through the bookkeeper like any other turn, so a message she
+ *  sent at midnight is in her memory and on the ledger rather than being
+ *  atmosphere.
+ */
+
+const BETWEEN_SYSTEM = `Write what passed between two people across a gap of days, in between chapters of a story. They were not in a room together for any of it, so this is texts, a phone call, a plan made or dropped, something sent, or a silence that both of them noticed.
+
+Two to four short paragraphs. Present the messages as messages — you can quote them, and they should sound like how people actually type, including the ones sent at one in the morning and the ones that got no reply for six hours.
+
+START FROM WHAT WAS ARRANGED. If they agreed to something at the end of the last chapter — a text at four, a call, a plan for the weekend — then it either happened or it did not, and you say which. A player who set something up and hears nothing about it has watched the game forget.
+
+If nothing was arranged, then the gap is about who reached out first, or whether anybody did. Silence is a real answer and it means something; a person who does not text for four days has told you something.
+
+Don't write them meeting. Meetings are what the chapters are for. This is only the part in between.
+
+Don't summarise the relationship, don't say what anybody decided, and don't end on a line about where things stand. Finish on a message or on the absence of one.
+
+WHERE THINGS HAVE GOT TO PHYSICALLY MATTERS. Two people who have slept together text differently from two who have not. If the register allows it and they have been physical, the messages between them can be as direct as they would really be.
+
+${NO_TROPES}`;
+
+export async function betweenChapters(
+  s: SaveState, arc: Arc, days: number, lastDoor: string, model: string,
+): Promise<string> {
+  const layer = (s as { dating?: DatingLayer }).dating;
+  const her = s.characters[arc.char_id];
+  const inv = (s.condition["char_player"]?.inventory ?? []).map((i) => i.name).join(", ");
+  const volatile = [
+    `HOW LONG: ${days === 1 ? "one day" : `${days} days`}.`,
+    lastDoor ? `WHAT THE PLAYER DID AT THE END OF THE LAST CHAPTER: ${lastDoor}` : "",
+    inv ? `WHAT THE PLAYER IS CARRYING (a phone number here means they have one and it is worth using): ${inv}` : "",
+    ``,
+    standing(s, arc),
+    her?.speech_pattern ? `${arc.name} types the way they talk: ${her.speech_pattern}` : "",
+    ``,
+    `HOW THE LAST CHAPTER ENDED:\n${recent(s, 2)}`,
+    ``,
+    layer ? EXPLICITNESS[layer.heat?.explicitness ?? "frank"].directive : "",
+    bounds(layer),
+  ].filter(Boolean).join("\n");
+  try {
+    const out = await complete(
+      buildMessages(BETWEEN_SYSTEM, "BETWEEN", volatile, model),
+      model, fb(model), false, 800,
     );
     return out.text.trim();
   } catch { return ""; }

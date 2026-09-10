@@ -26,7 +26,7 @@ import type { ActionMode, SaveState } from "@weft/engine/types";
 import { DEFAULT_MODELS } from "@weft/engine/types";
 import { activeArc, currentBeat, isDating, type DatingLayer, type Door, type Keepsake } from "./types";
 import { enterBeat, gateCheck, heatOf, openGate, resolveTerminal, skipMinutes, takeDoor, terminalOf } from "./arc";
-import { beatDirective, consequenceFor, doorsFor, endingFor, judgeBeat, lastCallError, openingFor, voiceCheck } from "./gate";
+import { beatDirective, betweenChapters, consequenceFor, doorsFor, endingFor, judgeBeat, lastCallError, openingFor, voiceCheck } from "./gate";
 import { voiceCorrection } from "./tics";
 import { adultAge, emptyAppetites, type Appetites } from "./appetite";
 import { runCasting, beginRoute, type CastingInput } from "./casting";
@@ -141,6 +141,29 @@ export async function openBeat(id: string): Promise<ClientSave> {
   const beat = currentBeat(arc);
   if (!arc || !beat || !isDating(s)) return weft.save(id);
 
+  /* THE PLACE IS SET BEFORE THE OPENING IS WRITTEN, not after.
+     One save had a chapter whose `where` was her house and whose opening began
+     "you step into the shop" — the previous chapter's location, which the model
+     had in front of it in the replayed prose and preferred to the line in the
+     brief. The bookkeeper then read that opening, correctly concluded the
+     player was in the shop, and moved them there, so the chapter ran in the
+     wrong building. Moving first means the opening is written against a state
+     that already says where everybody is, and the resolved name is handed to it
+     as the only permitted setting. */
+  if (beat.where) {
+    const pid = resolvePlace(s, beat.where);
+    if (pid) {
+      s.world.player_location = pid;
+      beat.place_id = pid;
+      const her = s.characters[arc.char_id];
+      if (her) {
+        her.location = pid;
+        her.location_since = s.world.current_time;
+      }
+      clearTheRoom(s, arc.char_id, pid, `${beat.title} ${beat.job}`);
+    }
+  }
+
   if (!beat.opening) {
     const written = await openingFor(s, smallModel(s));
     if (written) {
@@ -166,24 +189,6 @@ export async function openBeat(id: string): Promise<ClientSave> {
   // Put the player where the beat says they are. The place may not exist yet —
   // resolvePlace inside Weft creates it on first mention, so a beat set
   // somewhere the forge did not build still works.
-  /* PUT THEM BOTH IN THE NEW PLACE. resolvePlace creates one on first mention,
-     so a chapter set somewhere the forge never built still works — which is the
-     difference between a scene that opens where it says it does and one that
-     silently opens wherever the last one ended. */
-  if (beat.where) {
-    const pid = resolvePlace(s, beat.where);
-    if (pid) {
-      s.world.player_location = pid;
-      beat.place_id = pid;
-      const her = s.characters[arc.char_id];
-      if (her) {
-        her.location = pid;
-        her.location_since = s.world.current_time;
-      }
-      clearTheRoom(s, arc.char_id, pid, `${beat.title} ${beat.job}`);
-    }
-  }
-
   // Beat one is the save's opening scene, so Weft renders it as "the beginning"
   // before turn 1 exactly as it does for its own worlds.
   if (beat.idx === 0 && beat.opening && !s.history.some((h) => h.kind === "opening")) {
@@ -477,6 +482,24 @@ export async function walkThrough(id: string, doorId: string, onPhase: (p: strin
       await runInterlude(s, Math.min(30, days), { onPhase: () => {} });
     } catch {
       s.world.current_time = advanceClock(s.world.current_time, minutes);
+    }
+    /* The interlude covers the world. This covers the two of them, which is the
+       part a dating game is actually made of, and which nothing was writing. */
+    onPhase("the days between");
+    const bridge = await betweenChapters(s, arc, Math.min(30, days), door.label, bigModel(s));
+    if (bridge) {
+      try {
+        await runTurn(s, `— the ${days === 1 ? "day" : `${days} days`} in between —`,
+          { onPhase: () => {}, onDelta: () => {}, onMeta: () => {} },
+          "story", { proseOverride: bridge });
+      } catch {
+        s.history.push({
+          turn: ++s.world.current_turn, kind: "turn",
+          player_action: `— the ${days === 1 ? "day" : `${days} days`} in between —`,
+          action_mode: "story", narrator_prose: bridge, summary: "", offscreen: [],
+          time_label: s.world.current_time,
+        });
+      }
     }
   } else {
     s.world.current_time = advanceClock(s.world.current_time, minutes);

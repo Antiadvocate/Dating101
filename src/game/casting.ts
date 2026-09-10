@@ -22,6 +22,7 @@ import { DEFAULT_MODELS } from "@weft/engine/types";
 import type { SaveState, Identity } from "@weft/engine/types";
 import { ROUTE_ACCENTS, type AnySave, type Arc, type Beat, type DatingLayer, type Terminal } from "./types";
 import { enterBeat } from "./arc";
+import { fb } from "./gate";
 import { seedAttraction } from "@weft/engine/desire";
 import { appetiteBrief, adultAge, emptyAppetites, EXPLICITNESS, HARD_FLOOR, type Appetites, type Explicitness } from "./appetite";
 
@@ -153,6 +154,43 @@ interface RawRoute {
   terminals?: { kind?: string; title?: string; description?: string }[];
 }
 
+/**
+ * What is wrong with a spine, in the words the next attempt needs to hear.
+ *
+ * Empty means it is acceptable. Everything checked here is a countable property
+ * of the returned object rather than a judgement about the writing.
+ */
+function spineComplaints(routes: RawRoute[], input: CastingInput): string[] {
+  if (input.explicitness !== "explicit") return [];
+  const out: string[] = [];
+  for (const r of routes) {
+    const beats = r.beats ?? [];
+    if (beats.length < 4) continue;
+    const who = String(r.name ?? "a route");
+    const heats = beats.map((b) => String(b?.heat ?? "none"));
+    const sex = heats.filter((h) => h === "sex").length;
+    const want = Math.floor(beats.length / 2);
+    if (sex < want) {
+      out.push(`${who}: only ${sex} of ${beats.length} chapters are "sex". This register needs at least ${want}. Rewrite the jobs of the middle and late chapters so they ARE sex scenes, rather than relabelling conversations.`);
+    }
+    const firstSex = heats.indexOf("sex");
+    if (firstSex === -1 || firstSex > 2) {
+      out.push(`${who}: the first "sex" chapter is at index ${firstSex === -1 ? "none" : firstSex}. It must be at index 2 or earlier.`);
+    }
+    for (const b of beats) {
+      const h = String(b?.heat ?? "none");
+      const rt = Number(b?.rung_target);
+      if (h === "sex" && !(rt >= 5)) out.push(`${who}: the chapter "${b?.title}" is marked sex but has rung_target ${b?.rung_target}. A sex chapter is 5 or 6.`);
+      if (h === "builds" && !(rt >= 3)) out.push(`${who}: the chapter "${b?.title}" is marked builds but has rung_target ${b?.rung_target}. A builds chapter is 3 or 4.`);
+    }
+    const abouts = beats.filter((b) => String(b?.heat) === "sex").map((b) => String(b?.about ?? "").toLowerCase().trim());
+    if (new Set(abouts.filter(Boolean)).size < abouts.filter(Boolean).length) {
+      out.push(`${who}: two sex chapters are built around the same thing. Each takes a different item.`);
+    }
+  }
+  return out.slice(0, 8);
+}
+
 const clampInt = (v: unknown, lo: number, hi: number, dflt: number) => {
   const n = Math.round(Number(v));
   return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : dflt;
@@ -190,7 +228,13 @@ function normalizeBeats(raw: RawRoute["beats"], want: number, places: string[]):
     const heat = ["none", "builds", "sex"].includes(String(b?.heat)) ? b!.heat as Beat["heat"] : "none";
     out.push({
       heat,
-      rung_target: clampInt(b?.rung_target, 0, 6, heat === "sex" ? 5 : heat === "builds" ? 3 : 0),
+      // A floor, not a default. The model returned 2 on a chapter it had itself
+      // marked as a sex scene, and a finite wrong number was being kept because
+      // only a non-finite one fell through to the default.
+      rung_target: Math.max(
+        clampInt(b?.rung_target, 0, 6, heat === "sex" ? 5 : heat === "builds" ? 3 : 0),
+        heat === "sex" ? 5 : heat === "builds" ? 3 : 0,
+      ),
       about: String(b?.about ?? "").trim() || undefined,
       id: uid("beat"),
       idx: out.length,
@@ -328,13 +372,26 @@ export async function runCasting(input: CastingInput, onPhase: CastingProgress =
     roster,
   ].join("\n");
 
-  const msgs = buildMessages(SPINE_SYSTEM, "SPINE REQUEST", volatile, model);
   let parsed: { routes?: RawRoute[] } = {};
+  let correction = "";
   for (const m of [model, model, DEFAULT_MODELS.fallback_model]) {
     try {
-      const out = await complete(msgs, m, m, true, 7000);
-      parsed = safeJson<{ routes?: RawRoute[] }>(out.text, {});
-      if ((parsed.routes?.length ?? 0) >= pairs.length) break;
+      const msgs = buildMessages(SPINE_SYSTEM, "SPINE REQUEST", volatile + correction, m);
+      const out = await complete(msgs, m, fb(m), true, 7000);
+      const got = safeJson<{ routes?: RawRoute[] }>(out.text, {});
+      if ((got.routes?.length ?? 0) < pairs.length) continue;
+      parsed = got;
+      /* CHECK THE SHAPE AND ASK AGAIN IF IT IS WRONG.
+         The instruction to build an erotic spine on an explicit register was
+         written, read, and ignored: one save came back with a single sex beat at
+         index six of eight and a rung_target of two on it, on a palette naming
+         four specific things the player wanted chapters about. A rule a model
+         may decline to follow is a rule that needs checking, and the shape of a
+         spine is entirely checkable. */
+      const bad = spineComplaints(got.routes ?? [], input);
+      if (!bad.length) break;
+      correction = `\n\nYOUR PREVIOUS ATTEMPT WAS REJECTED. Fix exactly these and return the whole thing again:\n${bad.map((b) => `- ${b}`).join("\n")}`;
+      onPhase("the arcs came back too tame — asking again");
     } catch { /* fall through to the next model */ }
   }
 
