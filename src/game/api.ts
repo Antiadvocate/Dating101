@@ -26,8 +26,9 @@ import type { ActionMode, SaveState } from "@weft/engine/types";
 import { DEFAULT_MODELS } from "@weft/engine/types";
 import { activeArc, currentBeat, isDating, type DatingLayer, type Door, type Keepsake } from "./types";
 import { enterBeat, gateCheck, heatOf, openGate, resolveTerminal, skipMinutes, takeDoor, terminalOf } from "./arc";
-import { beatDirective, betweenChapters, consequenceFor, doorsFor, endingFor, judgeBeat, lastCallError, openingFor, voiceCheck } from "./gate";
+import { beatDirective, betweenChapters, consequenceFor, doorsFor, endingFor, judgeBeat, lastCallError, lastRefusal, openingFor, voiceCheck } from "./gate";
 import { voiceCorrection } from "./tics";
+import { isRefusal, noteOf } from "./refusal";
 import { adultAge, emptyAppetites, type Appetites } from "./appetite";
 import { runCasting, beginRoute, type CastingInput } from "./casting";
 import { runTurn, resolvePlace } from "@weft/engine/turn";
@@ -76,6 +77,24 @@ function bigModel(s: SaveState): string {
  *  than it used to: this call is the only thing standing between the narrator
  *  and its own habits now, so it is worth being able to point it somewhere
  *  better than whatever is doing the JSON. */
+/** The model the player nominated for work the first one declines. Empty until
+ *  they set one, and empty is a legitimate answer — a refusal then simply stops
+ *  and says so rather than being routed nowhere. */
+function altModel(s: SaveState): string {
+  return (s as SaveState & { dating?: DatingLayer }).dating?.fallback_model ?? "";
+}
+
+/** Record that something was declined, so the console can show what and where. */
+async function noteRefusal(id: string, where: string): Promise<void> {
+  if (!lastRefusal) return;
+  const s = await need(id);
+  if (!isDating(s)) return;
+  const log = (s.dating.refusals ??= []);
+  log.push(noteOf(where, lastRefusal.model, lastRefusal.routed_to, lastRefusal.said));
+  if (log.length > 20) log.splice(0, log.length - 20);
+  await putSave(s);
+}
+
 function readerModel(s: SaveState): string {
   return s.model_settings.reviser_model || smallModel(s);
 }
@@ -283,18 +302,96 @@ export async function play(
   await syncDirective(pre);
   await putSave(pre);
 
-  await streamTurn(id, action, mode, {
-    ...ev,
-    onDone: async (save) => {
-      ev.onDone?.(save);
-      try {
-        if (opts?.illustrate) void illustrateTurn(id, save.world.current_turn, ev);
-        await afterTurn(id, ev);
-      } catch (e: any) {
-        ev.onError?.(e?.message ?? "the gate check failed");
+  const alt = altModel(pre);
+  const primary = pre.model_settings.narrator_model;
+
+  /**
+   * THE NARRATOR CAN SAY NO, AND SAYING NO ARRIVES AS A 200.
+   *
+   * Every other refusal path in this layer is a plain call that can be
+   * inspected before anything is kept. The narrator streams, so a decline
+   * arrives a token at a time and lands on the page — the player watches the
+   * narrator stop being a narrator and start addressing them about content
+   * policy, and by the time it is legible the turn is most of the way through.
+   *
+   * So the stream is watched. A refusal declares itself in the first line or
+   * two, which is enough to abort before the bookkeeper has run and before
+   * anything is written, swap the narrator for the model the player nominated
+   * for exactly this, and run the turn again. Weft unwinds cleanly on abort —
+   * nothing is persisted until the diff commits — so the discarded attempt
+   * costs tokens and nothing else.
+   */
+  const runOnce = async (model: string, watch: boolean): Promise<"ok" | "refused"> => {
+    const guard = new AbortController();
+    const onAbort = () => guard.abort();
+    opts?.signal?.addEventListener("abort", onAbort);
+    let acc = "";
+    let refused = false;
+    try {
+      await streamTurn(id, action, mode, {
+        ...ev,
+        onDelta: (dtext) => {
+          if (refused) return;
+          acc += dtext;
+          // Long enough to be sure, short enough to stop before it is on screen.
+          if (watch && !refused && acc.length >= 90 && isRefusal(acc, 900)) {
+            refused = true;
+            guard.abort();
+            return;
+          }
+          ev.onDelta?.(dtext);
+        },
+        onDone: async (save) => {
+          if (refused) return;
+          ev.onDone?.(save);
+          try {
+            if (opts?.illustrate) void illustrateTurn(id, save.world.current_turn, ev);
+            await afterTurn(id, ev);
+          } catch (e: any) {
+            ev.onError?.(e?.message ?? "the gate check failed");
+          }
+        },
+        onError: (m) => { if (!refused) ev.onError?.(m); },
+        onCancel: () => { if (!refused) ev.onCancel?.(); },
+      }, { signal: guard.signal });
+    } catch (e) {
+      if (!refused) throw e;
+    } finally {
+      opts?.signal?.removeEventListener("abort", onAbort);
+    }
+    if (refused) {
+      const s = await need(id);
+      if (isDating(s)) {
+        const log = (s.dating.refusals ??= []);
+        log.push(noteOf("the narrator", model, alt || "", acc));
+        if (log.length > 20) log.splice(0, log.length - 20);
+        await putSave(s);
       }
-    },
-  }, { signal: opts?.signal });
+    }
+    return refused ? "refused" : "ok";
+  };
+
+  const first = await runOnce(primary, !!alt);
+  if (first === "ok") return;
+
+  if (!alt || alt === primary) {
+    ev.onError?.("The narrator declined to write that, and no second model is set. Studio → the model for work the first one won't do.");
+    return;
+  }
+
+  // Swap the narrator for the nominated model, run again, put it back.
+  ev.onPhase?.(`${primary} declined — handing it to ${alt}`);
+  const swap = await need(id);
+  swap.model_settings.narrator_model = alt;
+  await putSave(swap);
+  try {
+    const second = await runOnce(alt, false);
+    if (second === "refused") ev.onError?.(`${alt} declined it as well.`);
+  } finally {
+    const back = await need(id);
+    back.model_settings.narrator_model = primary;
+    await putSave(back);
+  }
 }
 
 /** The post-turn check. Runs after the prose has committed, so nothing the
@@ -427,7 +524,8 @@ export async function walkThrough(id: string, doorId: string, onPhase: (p: strin
      what the choice did to it. One narrator call and one bookkeeper call, and
      it buys the difference between a choice and a menu selection. */
   onPhase("playing that out");
-  const prose = await consequenceFor(s, arc, door, bigModel(s));
+  const prose = await consequenceFor(s, arc, door, bigModel(s), altModel(s));
+  await noteRefusal(id, "the choice you made");
   if (prose) {
     try {
       await runTurn(s, door.label, { onPhase: () => {}, onDelta: () => {}, onMeta: () => {} },
@@ -453,7 +551,7 @@ export async function walkThrough(id: string, doorId: string, onPhase: (p: strin
     const kind = arc.ending_kind ?? resolveTerminal(s, arc);
     const terminal = terminalOf(arc, kind)!;
     await putSave(s);
-    const prose = await endingFor(s, arc, terminal, bigModel(s));
+    const prose = await endingFor(s, arc, terminal, bigModel(s), altModel(s));
     const fin = await need(id);
     const a = activeArc(fin);
     if (a) { a.ending_prose = prose; a.ending_kind = kind; a.state = kind === "win" ? "won" : kind === "loss" ? "lost" : "soured"; }
@@ -486,7 +584,8 @@ export async function walkThrough(id: string, doorId: string, onPhase: (p: strin
     /* The interlude covers the world. This covers the two of them, which is the
        part a dating game is actually made of, and which nothing was writing. */
     onPhase("the days between");
-    const bridge = await betweenChapters(s, arc, Math.min(30, days), door.label, bigModel(s));
+    const bridge = await betweenChapters(s, arc, Math.min(30, days), door.label, bigModel(s), altModel(s));
+    await noteRefusal(id, "the days between");
     if (bridge) {
       try {
         await runTurn(s, `— the ${days === 1 ? "day" : `${days} days`} in between —`,
@@ -712,7 +811,7 @@ export async function forceEnding(id: string, kind: "win" | "loss" | "sour"): Pr
   arc.ending_kind = kind;
   arc.ended_turn = s.world.current_turn;
   await putSave(s);
-  const prose = await endingFor(s, arc, terminal, bigModel(s));
+  const prose = await endingFor(s, arc, terminal, bigModel(s), altModel(s));
   const fin = await need(id);
   const a = activeArc(fin);
   if (a) { a.ending_prose = prose; a.ending_kind = kind; }
@@ -750,6 +849,16 @@ export async function rereadVoice(id: string): Promise<ClientSave> {
     fresh.dating.last_faults = faults.length ? faults : undefined;
     await putSave(fresh);
   }
+  return weft.save(id);
+}
+
+/** The model that gets work the first one declines. Empty is allowed and means
+ *  a refusal stops and says so rather than being routed nowhere. */
+export async function setFallbackModel(id: string, model: string): Promise<ClientSave> {
+  const s = await need(id);
+  if (!isDating(s)) return weft.save(id);
+  s.dating.fallback_model = model.trim() || undefined;
+  await putSave(s);
   return weft.save(id);
 }
 

@@ -238,6 +238,15 @@ export interface DatingLayer {
    *  model. Survives a reload, unlike the in-memory error ring, so it is still
    *  there when somebody comes back to ask what went wrong. */
   opening_error?: string;
+  /** THE MODEL TO HAND THE WORK TO WHEN THE FIRST ONE DECLINES.
+   *  Set in the studio and left empty by default. Whether a given model will
+   *  write a given scene is not something this app can know in advance, and
+   *  arguing with one that has said no wastes turns — so the player names a
+   *  second one and a refusal routes there in a single retry. */
+  fallback_model?: string;
+  /** Refusals, kept so the console can show which call was declined by which
+   *  model and where it went, including when the detector was wrong. */
+  refusals?: import("./refusal").RefusalNote[];
 }
 
 export type DatingSave = SaveState & { dating: DatingLayer };

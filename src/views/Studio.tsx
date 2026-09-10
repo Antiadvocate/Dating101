@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { getApiKey, setApiKey } from "@weft/config";
 import { DEFAULT_MODELS } from "@weft/engine/types";
-import { settings as saveSettings, editSave, editHeat, load } from "../game/api";
+import { settings as saveSettings, editSave, editHeat, load, setFallbackModel } from "../game/api";
 import { type Save } from "../game/types";
 import { EXPLICITNESS, type Explicitness } from "../game/appetite";
 import { Field, Mark } from "../ui/kit";
@@ -39,6 +39,7 @@ export default function Studio({ save, setSave, onClose }: {
   const [auto, setAuto] = useState(!!m.auto_illustrate);
   const [night, setNight] = useState(() => document.documentElement.getAttribute("data-mode") === "night");
   const [expl, setExpl] = useState<Explicitness>(save?.dating.heat.explicitness ?? "frank");
+  const [alt, setAlt] = useState(save?.dating.fallback_model ?? "");
   const [limits, setLimits] = useState((save?.dating.heat.limits ?? []).join("\n"));
 
   useEffect(() => {
@@ -57,6 +58,7 @@ export default function Studio({ save, setSave, onClose }: {
         auto_illustrate: auto,
       });
       await editSave(save.id, { world_bible: { art_direction: art.trim() } });
+      await setFallbackModel(save.id, alt);
       await editHeat(save.id, {
         explicitness: expl,
         limits: limits.split(/[\n,]/).map((x) => x.trim()).filter(Boolean),
@@ -86,6 +88,13 @@ export default function Studio({ save, setSave, onClose }: {
         <Mark>Who writes it</Mark>
         <ModelPicker label="Narrator — the prose" role="narrator" value={narr} onChange={setNarr} />
         <ModelPicker label="Bookkeeper — the world, and the small work" role="bookkeeper" value={sim} onChange={setSim} />
+        <ModelPicker label="For anything the first one won't write" role="unfiltered" value={alt} onChange={setAlt} />
+        <div className="ui" style={{ fontSize: 11.5, color: "var(--ink-faint)", marginTop: -18, marginBottom: 26, lineHeight: 1.55 }}>
+          Every prompt that could be turned down asks the model to answer with one word if it would
+          rather not, instead of writing an apology or quietly leaving the substance out. When that
+          word comes back, the same prompt goes here once. Leave it empty and a refusal stops and
+          tells you, which is still better than a scene that went nowhere for no stated reason.
+        </div>
 
         <Mark>How it looks</Mark>
         <ModelPicker label="Image model" role="image" value={img} onChange={setImg} />

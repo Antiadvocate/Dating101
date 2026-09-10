@@ -37,12 +37,13 @@ interface ORModel {
   ctx?: number;
 }
 
-export type Role = "forge" | "narrator" | "bookkeeper" | "image";
+export type Role = "forge" | "narrator" | "bookkeeper" | "image" | "unfiltered";
 
 const ROLE_NOTE: Record<Role, string> = {
   forge: "Makes one call at the start, and the quality of everything afterwards rests on it, so this is the slot worth spending on.",
   narrator: "Runs once a turn on a large prompt, which makes it almost the entire cost of a campaign. Everything else is rounding.",
   bookkeeper: "Does the bookkeeping several times a turn on small prompts, so it wants something fast and cheap rather than something clever.",
+  unfiltered: "Only used when the first model declines to write something. Nothing routes here otherwise, so it costs nothing to set and it is the difference between a refused scene and a scene.",
   image: "Draws the portraits and the scene pictures. The Gemini flash-image models can take the portraits as reference images, which is what keeps a face recognisable from one scene to the next.",
 };
 
@@ -66,6 +67,11 @@ const SUGGESTED: Record<Role, { id: string; why: string }[]> = {
     { id: "google/gemini-3.1-flash-lite", why: "Fast, cheap, reliable at strict JSON. The default for a reason." },
     { id: "google/gemini-2.0-flash-001", why: "The older one. Cheaper still." },
     { id: "anthropic/claude-haiku-4.5", why: "Better at holding a schema when the small models start dropping fields." },
+  ],
+  unfiltered: [
+    { id: "x-ai/grok-4", why: "The usual answer. Least likely to stop partway through an adult scene." },
+    { id: "deepseek/deepseek-v4-pro", why: "Cheap, and rarely refuses fiction between adults." },
+    { id: "mistralai/mistral-large-2411", why: "Another one that tends to just write it." },
   ],
   image: [
     { id: "google/gemini-2.5-flash-image", why: "Takes the portraits as reference images, so the cast stays recognisable." },

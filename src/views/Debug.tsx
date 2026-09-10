@@ -262,6 +262,29 @@ export default function Debug({ save, setSave, onEdit, onPlay }: {
             this app ever showed it, so every failed call surfaced as "the model
             call failed" and the reason — a refusal, a bad key, no credit, a
             provider 400 — was sitting in memory unread. */}
+        {!!save.dating.refusals?.length && (
+          <>
+            <Mark accent>Refused</Mark>
+            <div style={{ display: "grid", gap: 10, marginBottom: 12 }}>
+              {[...save.dating.refusals].reverse().slice(0, 6).map((r, i) => (
+                <div key={i} style={{ paddingLeft: 12, borderLeft: "2px solid var(--accent-line)" }}>
+                  <div className="label" style={{ marginBottom: 2 }}>
+                    {r.where} · {r.model} · {new Date(r.at).toLocaleTimeString()}
+                  </div>
+                  <div className="ui" style={{ fontSize: 12, color: "var(--ink-mid)", lineHeight: 1.5 }}>
+                    {r.routed_to ? `handed to ${r.routed_to}` : "nowhere to hand it to"}
+                    {r.said ? ` — it said: ${r.said}` : ""}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="ui" style={{ fontSize: 11.5, color: "var(--ink-faint)", marginBottom: 30, lineHeight: 1.55 }}>
+              What it said is printed so a wrong detection is visible. If something here was a real
+              scene rather than a refusal, the test is in src/game/refusal.ts.
+            </div>
+          </>
+        )}
+
         <Mark accent>Recent model errors</Mark>
         {llmErrors.length === 0 ? (
           <div className="ui" style={{ fontSize: 12.5, color: "var(--ink-faint)", lineHeight: 1.6, marginBottom: 30 }}>

@@ -27,6 +27,7 @@ import { heatOf, edgeToPlayer, OUTCOME_WORD } from "./arc";
 import { readOf } from "./read";
 import { NO_TROPES, NO_PURPLE, parseFaults, type VoiceFault } from "./tics";
 import { appetiteBlock, EXPLICITNESS, HARD_FLOOR, RUNG_STEP, rungLabel } from "./appetite";
+import { isRefusal, REFUSAL_CONTRACT } from "./refusal";
 import type { DatingLayer } from "./types";
 
 function safeJson<T>(text: string, fallback: T): T {
@@ -57,6 +58,48 @@ export function fb(model: string): string {
  *  wrong instead of only that something did. Written by the wrappers below and
  *  read by openBeat. */
 export let lastCallError = "";
+
+/** Set by proseCall when a model declined and the work was routed. Read by the
+ *  API layer, which records it on the save. */
+export let lastRefusal: { where: string; model: string; routed_to: string; said: string } | null = null;
+
+/**
+ * A prose call that treats "no" as an answer rather than as prose.
+ *
+ * Tries the given model, and if what comes back is a refusal rather than a
+ * scene, hands the same prompt to the second model once. A model that has
+ * declined will decline again, so there is no point asking it twice; and
+ * arguing with it costs a turn and gets the same paragraph back.
+ */
+async function proseCall(
+  where: string, system: string, label: string, volatile: string,
+  model: string, alt: string, maxTokens: number,
+): Promise<string> {
+  lastRefusal = null;
+  const attempt = async (m: string) => {
+    const out = await complete(buildMessages(system, label, volatile, m), m, fb(m), false, maxTokens);
+    return (out.text ?? "").trim();
+  };
+  let first = "";
+  try { first = await attempt(model); } catch (e: any) { lastCallError = `${model}: ${e?.message ?? "failed"}`; }
+  if (first && !isRefusal(first)) return first;
+
+  if (alt && alt !== model) {
+    try {
+      const second = await attempt(alt);
+      if (second && !isRefusal(second)) {
+        if (first) lastRefusal = { where, model, routed_to: alt, said: first };
+        return second;
+      }
+      if (first) lastRefusal = { where, model, routed_to: `${alt} (also declined)`, said: first };
+    } catch (e: any) { lastCallError = `${alt}: ${e?.message ?? "failed"}`; }
+  } else if (first) {
+    lastRefusal = { where, model, routed_to: "", said: first };
+  }
+  // Everything declined, so nothing is returned rather than a refusal being
+  // printed into the story as though the narrator had written it.
+  return "";
+}
 
 /** The last few turns as plain text — the only story context any of these calls
  *  gets. Two turns is enough to judge a beat and keeps the call small. */
@@ -114,7 +157,9 @@ ${NO_TROPES}
 
 Don't summarise where the relationship stands, don't tell the player how they feel, don't foreshadow, and don't write dialogue. Don't explain what the chapter is for either, because that's machinery and the player shouldn't be able to see it from the page.
 
-Output ONE strict JSON object: {"opening":"","time":"a time of day like 'evening' or 'just past two'","title_line":"a six-to-twelve word line printed under the chapter title — a physical detail from the scene, never a theme"}`;
+Output ONE strict JSON object: {"opening":"","time":"a time of day like 'evening' or 'just past two'","title_line":"a six-to-twelve word line printed under the chapter title — a physical detail from the scene, never a theme"}
+
+${REFUSAL_CONTRACT}`;
 
 export async function openingFor(s: SaveState, model: string): Promise<{ opening: string; time: string; title_line: string } | null> {
   const arc = activeArc(s);
@@ -325,9 +370,11 @@ ${NO_PURPLE}
 
 Do not state anyone's interior. Do not end on an aphorism. Do not name the ending.
 
-Output plain prose. No JSON, no headings, no title.`;
+Output plain prose. No JSON, no headings, no title.
 
-export async function endingFor(s: SaveState, arc: Arc, terminal: Terminal, model: string): Promise<string> {
+${REFUSAL_CONTRACT}`;
+
+export async function endingFor(s: SaveState, arc: Arc, terminal: Terminal, model: string, alt = ""): Promise<string> {
   const h = heatOf(s, arc.char_id);
   const played = arc.beats
     .filter((b) => b.status === "done")
@@ -346,10 +393,9 @@ export async function endingFor(s: SaveState, arc: Arc, terminal: Terminal, mode
     bounds((s as { dating?: DatingLayer }).dating),
   ].join("\n");
 
-  try {
-    const out = await complete(buildMessages(ENDING_SYSTEM, "ENDING", volatile, model), model, fb(model), false, 1600);
-    return out.text.trim();
-  } catch {
+  const written = await proseCall("the ending", ENDING_SYSTEM, "ENDING", volatile, model, alt, 1600);
+  if (written) return written;
+  {
     return `${terminal.description}\n\n(The ending could not be written — the model call failed. Everything that happened is still in the journal, and you can try again from the spine.)`;
   }
 }
@@ -378,10 +424,12 @@ Don't summarise, and don't write a closing line. End on something somebody does 
 
 ${NO_TROPES}
 
-${NO_PURPLE}`;
+${NO_PURPLE}
+
+${REFUSAL_CONTRACT}`;
 
 export async function consequenceFor(
-  s: SaveState, arc: Arc, door: Door, model: string,
+  s: SaveState, arc: Arc, door: Door, model: string, alt = "",
 ): Promise<string> {
   const beat = currentBeat(arc);
   const volatile = [
@@ -395,13 +443,7 @@ export async function consequenceFor(
     ``,
     bounds((s as { dating?: DatingLayer }).dating),
   ].filter(Boolean).join("\n");
-  try {
-    const out = await complete(
-      buildMessages(CONSEQUENCE_SYSTEM, "CONSEQUENCE", volatile, model),
-      model, fb(model), false, 900,
-    );
-    return out.text.trim();
-  } catch { return ""; }
+  return proseCall("the choice you made", CONSEQUENCE_SYSTEM, "CONSEQUENCE", volatile, model, alt, 900);
 }
 
 /* ── 4c. THE DAYS BETWEEN ────────────────────────────────────────────────────
@@ -438,10 +480,12 @@ Don't summarise the relationship, don't say what anybody decided, and don't end 
 
 WHERE THINGS HAVE GOT TO PHYSICALLY MATTERS. Two people who have slept together text differently from two who have not. If the register allows it and they have been physical, the messages between them can be as direct as they would really be.
 
-${NO_TROPES}`;
+${NO_TROPES}
+
+${REFUSAL_CONTRACT}`;
 
 export async function betweenChapters(
-  s: SaveState, arc: Arc, days: number, lastDoor: string, model: string,
+  s: SaveState, arc: Arc, days: number, lastDoor: string, model: string, alt = "",
 ): Promise<string> {
   const layer = (s as { dating?: DatingLayer }).dating;
   const her = s.characters[arc.char_id];
@@ -459,13 +503,7 @@ export async function betweenChapters(
     layer ? EXPLICITNESS[layer.heat?.explicitness ?? "frank"].directive : "",
     bounds(layer),
   ].filter(Boolean).join("\n");
-  try {
-    const out = await complete(
-      buildMessages(BETWEEN_SYSTEM, "BETWEEN", volatile, model),
-      model, fb(model), false, 800,
-    );
-    return out.text.trim();
-  } catch { return ""; }
+  return proseCall("the days between", BETWEEN_SYSTEM, "BETWEEN", volatile, model, alt, 800);
 }
 
 /* ── 5. THE VOICE CHECK ──────────────────────────────────────────────────────
