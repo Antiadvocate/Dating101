@@ -26,7 +26,7 @@ import type { ActionMode, SaveState } from "@weft/engine/types";
 import { DEFAULT_MODELS } from "@weft/engine/types";
 import { activeArc, currentBeat, isDating, type DatingLayer, type Door, type Keepsake } from "./types";
 import { enterBeat, gateCheck, heatOf, openGate, resolveTerminal, takeDoor, terminalOf } from "./arc";
-import { beatDirective, doorsFor, endingFor, judgeBeat, openingFor } from "./gate";
+import { beatDirective, doorsFor, endingFor, judgeBeat, openingFor, voiceCheck } from "./gate";
 import { findTics, ticCorrection } from "./tics";
 import { adultAge, emptyAppetites, type Appetites } from "./appetite";
 import { runCasting, beginRoute, type CastingInput } from "./casting";
@@ -176,8 +176,9 @@ async function syncDirective(s: SaveState): Promise<void> {
   const arc = activeArc(s);
   const beat = currentBeat(arc);
   if (!arc || !beat || !isDating(s)) return;
-  const owed = s.history.length
-    ? ticCorrection(findTics(s.history[s.history.length - 1].narrator_prose ?? ""))
+  const last = s.history[s.history.length - 1];
+  const owed = last
+    ? ticCorrection(findTics(last.narrator_prose ?? ""), s.dating.last_faults ?? [])
     : "";
   s.world_bible.narrator_direction = [
     beatDirective(s, arc, beat, s.dating),
@@ -227,6 +228,21 @@ async function afterTurn(id: string, ev: PlayEvents): Promise<void> {
   const s = await need(id);
   const arc = activeArc(s);
   if (!arc || arc.state !== "running" || !isDating(s) || s.dating.gate) return;
+
+  /* THE VOICE CHECK, on every turn, before anything else. It reads only the
+     prose just written — no digest, no cast, no rules — so it is a few hundred
+     tokens on the small model, and it catches the dialogue failures no pattern
+     can: somebody narrating the conversation they are in, a line that would fit
+     in any story, a face doing something unnamed. Quoted back next turn. */
+  const written = s.history[s.history.length - 1]?.narrator_prose ?? "";
+  if (written) {
+    const faults = await voiceCheck(written, smallModel(s));
+    const withFaults = await need(id);
+    if (isDating(withFaults)) {
+      withFaults.dating.last_faults = faults.length ? faults : undefined;
+      await putSave(withFaults);
+    }
+  }
 
   const g = gateCheck(s);
   if (!g.beat) return;

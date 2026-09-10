@@ -189,6 +189,12 @@ export interface DatingLayer {
   appetites: Record<string, Appetites>;
   /** Turns the player has spent at a gate without choosing. Cosmetic. */
   seen_prologue?: boolean;
+  /** Sentences the voice check found in the turn just written, quoted back to
+   *  the narrator on the next one and then cleared. Weft uses the same
+   *  mechanism for maxims and echoes, and it is the only correction in the
+   *  engine that reliably changes behaviour — a rule in the system prompt gets
+   *  read as reference, a sentence you just wrote gets read as a mistake. */
+  last_faults?: { quote: string; why: string }[];
 }
 
 export type DatingSave = SaveState & { dating: DatingLayer };

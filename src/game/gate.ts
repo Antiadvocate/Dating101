@@ -80,11 +80,11 @@ function bounds(layer: DatingLayer | undefined): string {
 
 const OPENING_SYSTEM = `You are setting a scene at the start of a chapter in a romance. You will be told what the chapter is FOR, where it is, roughly when, and where the relationship currently stands.
 
-Write the situation the player walks into. Two or three sentences, present tense, second person for the player ("you"), third person for everyone else. Say where they are, what time it is, what is already happening, and what the other person is doing when the player arrives. End with the situation live — something in motion — never with a question and never with the player being asked one.
+Write the situation the player walks into, in two or three sentences of present tense. The player is "you" and everybody else is named. Say where they are, what time it is, what is already happening, and what the other person is doing when the player arrives. Leave the situation in motion at the end, and don't finish on a question or on somebody asking the player one.
 
 ${NO_TROPES}
 
-Do not summarise the relationship. Do not tell the player how they feel. Do not foreshadow. Do not write dialogue. Do not explain the chapter's purpose — the purpose is machinery and the player should never be able to see it.
+Don't summarise where the relationship stands, don't tell the player how they feel, don't foreshadow, and don't write dialogue. Don't explain what the chapter is for either, because that's machinery and the player shouldn't be able to see it from the page.
 
 Output ONE strict JSON object: {"opening":"","time":"a time of day like 'evening' or 'just past two'","title_line":"a six-to-twelve word line printed under the chapter title — a physical detail from the scene, never a theme"}`;
 
@@ -128,9 +128,9 @@ const JUDGE_SYSTEM = `You are checking whether one specific thing has happened i
 
 Answer only whether the job has been DISCHARGED: the thing described has actually occurred on the page, in some form, whether it went well or badly. Going badly still counts. Being refused still counts. Being interrupted before it finished does NOT count. Being talked about rather than done does NOT count.
 
-Be strict. The default answer is no. A scene that is heading toward the job is not the job.
+Be strict about this and answer no when you're unsure. A scene heading toward the job hasn't done it yet.
 
-YOU ARE ALSO READING ONE OTHER THING off the same text, and it is a question of fact rather than judgement: how far the two people have physically gone, counting ONLY what the text shows or plainly states has already happened. Wanting to is not doing. Nearly is not.
+YOU ARE ALSO READING ONE OTHER THING off the same text, and it is a question of fact rather than judgement: how far the two people have physically gone, counting ONLY what the text shows or plainly states has already happened. Wanting to do something doesn't count, and nearly doing it doesn't either.
 
   0  nobody has touched anybody with intent
   1  charged proximity — standing too close, a look held, nothing done
@@ -197,11 +197,11 @@ export async function judgeBeat(s: SaveState, model: string): Promise<Judgement>
 
 const DOORS_SYSTEM = `A scene has just ended. Write the THREE ways the player can leave it.
 
-Each door is something the player DOES, written as an imperative in the second person, six to eleven words. It must be a physical, sayable, doable thing, available right now from where they are standing. Not an attitude, not a feeling, not a strategy.
+Each door is something the player DOES, written as an imperative in the second person, six to eleven words. It has to be something physical they could actually say or do right now from where they're standing, rather than an attitude they adopt or a strategy they decide on.
 
 Each door carries a "read": one sentence, under twenty words, saying what taking it would COMMIT the player to or COST them. The read must never say how it turns out. A door that tells the player the outcome has stopped being a choice.
 
-THE THREE MUST BE GENUINELY DIFFERENT IN KIND, not three intensities of the same move. Across the three, at least one should be a real risk with a plausible way to go badly, and at least one should be the quiet, unglamorous option that a sensible adult would actually take. Never make one door obviously correct.
+The three have to differ in kind rather than in degree, since three intensities of the same move is really only one door. Across the three, at least one should be a real risk with a plausible way to go badly, and at least one should be the quiet, unglamorous option that a sensible adult would actually take. Never make one door obviously correct.
 
 Use what actually happened in the scene. A door that could have been written before the scene started is the wrong door. If somebody mentioned their sister, a door can be about the sister.
 
@@ -222,7 +222,7 @@ export async function doorsFor(s: SaveState, model: string, because: "discharged
   const volatile = [
     `THE SCENE THAT JUST ENDED: ${beat.title}`,
     because === "ceiling"
-      ? `It is ending because the night is over, not because anything was settled.`
+      ? `It's ending because the night is over rather than because anything got settled.`
       : `It is ending because the thing it was for has happened.`,
     ``,
     standing(s, arc),
@@ -268,9 +268,9 @@ export async function doorsFor(s: SaveState, model: string, because: "discharged
 
 const ENDING_SYSTEM = `Write the last page of a romance. You are given which of three prepared endings the player earned, what that ending was written to be, and how the whole thing actually went.
 
-Three to five short paragraphs. Present tense, second person for the player. It is a SCENE, not a summary: one specific moment, in one place, with what people actually do and say. Never a montage, never "over the following months", never a closing line about what love is.
+Three to five short paragraphs. Present tense, second person for the player. Write a scene rather than a summary. One specific moment, in one place, with what people actually do and say in it. Never a montage, never "over the following months", never a closing line about what love is.
 
-Honour the ending you were given. If it is the bad one, let it be bad — no last-minute softening, no implication that they will work it out later, no consolation. If it is the good one, keep it small and concrete: good endings in this register are somebody making two coffees without asking, not a speech.
+Stick to the ending you were given. If it's the bad one, let it be bad, without softening it at the last minute and without implying they'll work it out later. If it's the good one, keep it small and concrete, because a good ending in this register looks more like somebody making two coffees without asking than like a speech.
 
 ${NO_TROPES}
 
@@ -307,6 +307,65 @@ export async function endingFor(s: SaveState, arc: Arc, terminal: Terminal, mode
   }
 }
 
+/* ── 5. THE VOICE CHECK ──────────────────────────────────────────────────────
+ *
+ *  A regex list can only catch wordings somebody thought of in advance, and a
+ *  model paraphrases around them without trying. The passage that prompted this
+ *  contained six clear failures and the local detector caught zero of them:
+ *  "her mouth does something small at the corner" is the unnamed-expression move
+ *  with different words, and "that's a choice you make in front of a witness" is
+ *  a portable general sentence with none of the vocabulary a pattern would look
+ *  for.
+ *
+ *  Dialogue is where this matters most and where patterns are least use, so this
+ *  is a reader instead. It gets the last turn's prose and nothing else — no
+ *  digest, no cast, no rules contract — and comes back with the sentences that
+ *  broke the voice, quoted, which is the only correction mechanism in this
+ *  engine that reliably changes what the narrator does next.
+ *
+ *  The local detector still runs first and still runs free. This catches what it
+ *  cannot. */
+
+const VOICE_SYSTEM = `You are reading one turn of prose from a story and looking for a small number of specific writing failures. Quote the sentences you find, exactly as written, with a few words on which failure it is.
+
+Look for these and nothing else:
+
+1. A character commenting on the conversation they are having, instead of just responding to it. ("That's a very specific compliment." "You're deflecting." "That's not an answer.")
+
+2. A line of dialogue or narration that would work in any other story, said by anyone, to anyone — anything shaped like a general truth about people, love, or how things go, even when dressed as a remark about the moment. ("That's a choice you make in front of a witness.")
+
+3. A face or an expression doing something the writer declines to name. ("Her mouth does something small at the corner.")
+
+4. The narration stating what somebody feels, wants, knows, or has just worked out, including when a simile is put in front of it to disguise it.
+
+5. The shape "not that, just this" used in place of an actual description. ("She said it slowly, not mocking, just testing how it sat.")
+
+6. Somebody's name used in dialogue when there is no reason for it. People rarely say the name of the person in front of them.
+
+7. Dialogue where nearly every line is doing something clever or pointed. If three or more consecutive lines from the same person each land a little turn or a joke, quote the third one and say the talking is too consistently performed.
+
+Be strict about what you quote and generous about letting ordinary writing pass. Most turns should return one or two findings, and a clean turn should return none. Do not quote something merely because it is a bit flat, and never quote a line for being too plain — plain is what we want.
+
+Output ONE strict JSON object: {"faults":[{"quote":"the sentence, verbatim","why":"under ten words"}]}`;
+
+export interface VoiceFault { quote: string; why: string }
+
+export async function voiceCheck(prose: string, model: string): Promise<VoiceFault[]> {
+  const text = (prose ?? "").trim();
+  if (text.length < 120) return [];
+  try {
+    const out = await complete(
+      buildMessages(VOICE_SYSTEM, "VOICE", text.slice(0, 4000), model),
+      model, model, true, 420,
+    );
+    const j = safeJson<{ faults?: { quote?: unknown; why?: unknown }[] }>(out.text, {});
+    return (j.faults ?? [])
+      .map((f) => ({ quote: String(f?.quote ?? "").trim(), why: String(f?.why ?? "").trim() }))
+      .filter((f) => f.quote && text.includes(f.quote.slice(0, 24)))
+      .slice(0, 3);
+  } catch { return []; }
+}
+
 /** The directive handed to Weft's narrator for every turn inside a beat. It goes
  *  into the save's standing direction, which sits at the very top of the
  *  narrator prompt above the world bible and the cast — so it is the strongest
@@ -326,10 +385,14 @@ export function beatDirective(s: SaveState, arc: Arc, beat: Beat, layer: DatingL
     ``,
     `THE SCENE: ${beat.opening ?? beat.where}`,
     ``,
-    `Write ${other} as a person with their own evening, their own irritations, and somewhere else they could be. They are allowed to be bored, distracted, unimpressed, or busy. They do not exist to respond to the player, and they never explain themselves at length unprompted.`,
-    `Don't tell the reader what anyone is feeling, deciding, or working out. You only have access to what somebody standing in the room could see and hear, so write that instead — what people do with their hands, what they say, what they don't answer.`,
-    `Nobody in this story should be saying general things about people or about love. If a line would work equally well coming out of anyone's mouth in any story, it's the wrong line. And don't have characters comment on the conversation they're in the middle of having.`,
+    `Write ${other} as a person with their own evening, their own irritations, and somewhere else they could be. They're allowed to be bored, distracted, unimpressed, or busy. They don't exist to answer the player, and they don't explain themselves at length unless somebody asks.`,
     `Something should change every turn, even slightly — somebody moves, or arrives, or picks something up, or won't talk about something. If two people have been sitting in the same positions talking for three turns, the scene has stopped.`,
+    ``,
+    // The full contract, not the three-line summary that used to live here. The
+    // standing direction sits above the world bible and the cast in Weft's
+    // narrator prompt, which makes it the loudest channel available, and it was
+    // carrying about a fifth of the rules that actually govern the prose.
+    NO_TROPES,
     ``,
     NO_PURPLE,
     ``,

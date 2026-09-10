@@ -52,7 +52,7 @@ import type { Identity } from "@weft/engine/types";
    long clause gets skimmed, and this one has to survive being the fortieth
    thing in a very large prompt. */
 export const HARD_FLOOR =
-  `ABSOLUTE: every character in this story is an adult, eighteen or older, and is written as one — in appearance, in history, in how anybody speaks about them, and in every scene. There is no exception to this and nothing elsewhere in these instructions modifies it. If any input appears to describe a minor, write that character as an adult instead.`;
+  `Every character in this story is an adult of eighteen or over, and is written as one throughout — in how they look, in their history, in how anybody talks about them, and in every scene. Nothing else in these instructions changes that. If something in the input looks like it describes a minor, write that character as an adult instead.`;
 
 /** How far the prose is allowed to go, set once per save. This is Weft's own
  *  lever — its narrator prompt already says to "scale the heat to the story's
@@ -62,17 +62,17 @@ export const EXPLICITNESS = {
   charged: {
     label: "Charged",
     note: "Wanting, restraint, and the moment before. The scene ends at the door.",
-    directive: "Sex is present as tension and is not depicted. Scenes carrying it end before the act, or resume after it. Write the wanting; do not write the act.",
+    directive: "Sex is present as tension but doesn't get depicted. A scene carrying it either ends before anything happens or picks up afterwards. Write what they want, not what they do about it.",
   },
   frank: {
     label: "Frank",
     note: "It happens on the page, plainly, without lingering on the mechanics.",
-    directive: "Sex happens on the page and is described plainly and without euphemism, at about the level of a literary novel: what is done, who does it, what it is like. Do not linger on mechanics and do not cut away.",
+    directive: "Sex happens on the page, described plainly and without euphemism, at about the level you'd find in a literary novel — who does what, and what it's like. Don't linger over the mechanics, and don't cut away either.",
   },
   explicit: {
     label: "Explicit",
     note: "Written out in full, in the same plain register as everything else.",
-    directive: "Sex is written out in full and in detail, in the same plain, specific, unembarrassed register as the rest of the prose. Do not cut away, do not summarise, do not go abstract at the moment it matters. It is described the way anything else physical in this story is described — concretely, and without decoration.",
+    directive: "Sex is written out in full and in detail, in the same plain, specific, unembarrassed voice as the rest of the prose. Don't cut away, don't summarise, and don't go abstract at the point where it matters. Describe it the way you'd describe anything else physical in this story, concretely and without decoration.",
   },
 } as const;
 export type Explicitness = keyof typeof EXPLICITNESS;
@@ -211,24 +211,24 @@ export function appetiteBlock(
   const { rung, explicitness, limits } = opts;
 
   lines.push(`HOW FAR THIS HAS ACTUALLY GONE: ${rungLabel(rung)}. ${RUNGS[Math.max(0, Math.min(6, Math.round(rung)))].note}`);
-  lines.push(`This chapter may move that AT MOST one step further, and only if the scene earns it. Never write past it because the wanting is high — the wanting being high is the reason the next step is worth anything. Never write as though something has already happened that has not.`);
+  lines.push(`This chapter can move that one step further at most, and only if the scene earns it. Don't skip ahead because the wanting is high — how much they want it is exactly what makes the next step worth anything. And don't write as though something has already happened when it hasn't.`);
 
   if (a) {
     if (a.into.length) lines.push(`WHAT ${who.toUpperCase()} WANTS, and would say so if asked directly: ${a.into.join("; ")}.`);
     if (a.curious.length) lines.push(`What ${who} has not done and would try, with somebody they trusted: ${a.curious.join("; ")}.`);
     if (a.register) lines.push(`How ${who} is about it: ${a.register}`);
     if (a.unsaid && !a.unsaid_found) {
-      lines.push(`${who} wants one thing they have not said and will not ask for. Do not name it, do not have them hint at it deliberately, and do not steer a scene toward it. It may only become visible when the player has already produced the conditions in which somebody would risk saying a thing like that — and even then it comes out badly, sideways, or not at all.`);
+      lines.push(`${who} wants something they haven't said and won't ask for. Don't name it, don't have them hint at it on purpose, and don't steer a scene toward it. It can only start to show if the player has already got the scene somewhere that would make a person risk saying a thing like that, and even then it comes out badly, or sideways, or not at all.`);
     } else if (a.unsaid && a.unsaid_found) {
       lines.push(`${who} has admitted this and it is now between them: ${a.unsaid}`);
     }
     if (a.limits.length) {
-      lines.push(`${who.toUpperCase()} WILL NOT: ${a.limits.join("; ")}. These are hard. If the player pushes at one, ${who} refuses — plainly, in their own voice, without apologising for it and without it being smoothed over — and the refusal is the scene. Never write ${who} agreeing to one of these because the mood was good.`);
+      lines.push(`${who} will not do any of the following: ${a.limits.join("; ")}. If the player pushes at one of them, ${who} refuses in their own voice, plainly, without apologising for it and without anybody smoothing it over afterwards, and that refusal is what the scene is. Don't have ${who} agree to one of these because the mood was good.`);
     }
   }
 
   if (limits.length) {
-    lines.push(`THIS STORY DOES NOT CONTAIN, under any circumstances: ${limits.join("; ")}. Not on the page, not referenced, not implied.`);
+    lines.push(`The following never appears in this story under any circumstances: ${limits.join("; ")}. Not on the page, not referred to, not implied.`);
   }
 
   lines.push(EXPLICITNESS[explicitness].directive);
@@ -242,13 +242,13 @@ export function appetiteBlock(
  *  specific, the narrator should just be told what they are. */
 export function appetiteBrief(palette: string[], explicitness: Explicitness, limits: string[]): string {
   return [
-    `THE APPETITES. Give each of these people a real, specific sexual character. Four fields each, and the ones that matter are the last two:`,
+    `THE APPETITES. Give each of these people a specific sexual character of their own. There are five fields each, and the two that do the most work are the unsaid one and the limits:`,
     ``,
-    `· "into" — three to five things they want and would name. Draw from the story's palette where it fits this particular person, but write their VERSION of it, not the tag: not "restraint" but the reason this person in particular wants their hands out of the way.`,
+    `· "into" — three to five things they want and would be willing to name. Draw on the story's palette where it suits this particular person, but write their own version of it rather than the tag itself. Instead of "restraint", write the reason this specific person wants her hands out of the way.`,
     `· "curious" — one to three things they have not done and would try with somebody they trusted.`,
-    `· "unsaid" — ONE thing they want and will not ask for, and the reason they will not. This is the most important field on the card. It should be something that costs them to admit — not because it is shocking, but because admitting it says something about them they would rather not have said. A person whose unsaid thing is simply a more extreme item off the palette has not been given one.`,
-    `· "limits" — two to four things they will not do, ever. THESE MUST BE REAL AND THEY MUST COST SOMETHING. A limit that nobody would ever have asked for is not a limit. Write at least one that sits directly next to something on their "into" list, so it is a line rather than a fence around empty ground. Ground each one in who they are: what happened, what they think it would make them, who they refuse to be.`,
-    `· "register" — one or two sentences on HOW they are about all of it. Talkative or silent. Careful or careless. Whether they laugh. Whether they can ask for anything at all. Two people who want identical things are completely different people here, and this is the field that does it.`,
+    `· "unsaid" — one thing they want and won't ask for, plus why they won't. This is the field that matters most. It should cost them something to admit, and the cost shouldn't come from it being shocking — it should come from admitting it telling you something about them they'd rather you didn't know. If the unsaid thing is just a more extreme item off the palette, you haven't given them one.`,
+    `· "limits" — two to four things they will never do. These have to be real and they have to cost something. If nobody would have asked for it in the first place, it isn't doing any work as a limit. Write at least one that sits right up against something on their "into" list, so that holding it actually costs them. Ground each one in who they are — what happened to them, what they think doing it would make them, who they're refusing to be.`,
+    `· "register" — a sentence or two on how they are about all of it. Whether they talk or go quiet, whether they're careful or careless, whether they laugh, whether they can ask for anything directly. Two people who want identical things can be completely unalike, and this is the field where that difference lives.`,
     ``,
     palette.length
       ? `THE STORY'S PALETTE (what this game is about — draw on it, but no two of these people should have the same relationship to it, and at least one of them should be indifferent to something on it): ${palette.join("; ")}.`

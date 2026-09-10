@@ -43,7 +43,7 @@ export interface CastingInput {
   register: string;
   /** Where this happens. Blank lets the forge choose. */
   setting: string;
-  /** How long a route runs. Beats, not turns. */
+  /** How long a route runs, counted in chapters rather than turns. */
   beats: number;
   /** Ground the forge with web search — for a real city, a real subculture. */
   ground: boolean;
@@ -99,7 +99,7 @@ export function buildSeed(i: CastingInput): string {
     i.limits.length ? `THIS STORY NEVER CONTAINS: ${i.limits.join("; ")}.` : ``,
     HARD_FLOOR,
     ``,
-    `THE STORY IS ABOUT GETTING TO KNOW SOMEBODY. Threads and faction clocks should be the ordinary machinery of these people's lives — a lease running out, a sister who keeps calling, a job that is going badly, an ex who is still around, a band that is falling apart — not a conspiracy and not a crisis aimed at the player. Keep the seeded tension low. The pressure in this story comes from other people's lives colliding with yours, not from threat.`,
+    `THE STORY IS ABOUT GETTING TO KNOW SOMEBODY. Threads and faction clocks should be the ordinary machinery of these people's lives — a lease running out, a sister who keeps calling, a job that is going badly, an ex who is still around, a band that is falling apart — not a conspiracy and not a crisis aimed at the player. Keep the seeded tension low. The pressure in this story should come from other people's lives running into the player's, rather than from anything threatening them.`,
   ].join("\n");
 }
 
@@ -107,20 +107,20 @@ export function buildSeed(i: CastingInput): string {
 
 const SPINE_SYSTEM = `You are building the STRUCTURE of a romance — the ordered spine of scenes a route is made of, and the three ways it can end. Output ONE strict JSON object and nothing else.
 
-WHAT A BEAT IS. A beat is a JOB, not a scene. You are not writing what happens; you are naming what this scene EXISTS TO PUT IN FRONT OF THE PLAYER. The actual scene gets generated later, out of live state, when the player arrives at it — so a beat written as "they go to the pier and it rains" is useless (by the time it is reached the relationship may be nothing like the one it assumed), while "the first time she has to choose the player over something she already promised somebody else" works at any temperature and produces a different evening depending on where things stand.
+WHAT A BEAT IS. Write each beat as a job rather than as a scene. You're not describing what happens, you're naming what this scene exists to put in front of the player. The actual scene gets generated later, out of live state, when the player arrives at it — so a beat written as "they go to the pier and it rains" is useless (by the time it is reached the relationship may be nothing like the one it assumed), while "the first time she has to choose the player over something she already promised somebody else" works at any temperature and produces a different evening depending on where things stand.
 
 Write each job so that a reader could later look at a scene and answer yes or no: did that happen? "They grow closer" cannot be judged. "She tells the player something she has not told the friends she has had for ten years" can.
 
-THE SHAPE OF A ROUTE. Beat one is always the meeting, and it is small — two people in the same place with a plausible reason to speak. From there the beats must ESCALATE IN KIND, not just in intensity: a route that is eight conversations is a bad route. Across the spine you need at least one beat where somebody else is in the room, at least one where something practical goes wrong, at least one where the player sees this person doing the thing they actually do all day, at least one that is physical, and at least one where the person is unmistakably unhappy about something that is not the player. The last two beats are where it becomes what it is going to be.
+THE SHAPE OF A ROUTE. Beat one is always the meeting, and it is small — two people in the same place with a plausible reason to speak. After that the beats need to escalate in kind and not only in intensity, because a route made of eight conversations isn't much of a route. Across the spine you need at least one beat where somebody else is in the room, at least one where something practical goes wrong, at least one where the player sees this person doing the thing they actually do all day, at least one that is physical, and at least one where the person is unmistakably unhappy about something that is not the player. The last two beats are where it becomes what it is going to be.
 
 WHAT YOU ARE FORBIDDEN FROM WRITING.
 - No fated meetings, no bumping into each other and dropping papers, no rain-soaked confessions, no rescuing anybody from anything, no love triangles resolved by a third party leaving, no misunderstandings that a single sentence would fix, no "she is not like other people".
 - No beat may hinge on a secret being revealed, unless the player's own description of the person established a secret.
-- No beat may be titled or described with an aphorism, a maxim, or a general truth about love, people, or life. Not in a title, not in a job, not in a terminal.
+- Don't title or describe any beat with an aphorism or a general truth about love or people or life, and that goes for the titles, the jobs and the endings alike.
 - Do not write the person as a prize, a lesson, or a problem to be solved.
-- Nothing may be sentimental. Write it the way a good short story collection is written: specific, dry, and interested in what people actually do.
+- Keep the sentiment out of it and write the way a good short story collection is written, which is specific and dry and mostly interested in what people actually do.
 
-TITLES are a short phrase — four to nine words, concrete, drawn from the beat's own content. "The night the van does not start." "What she is like around her brother." Never a theme. Never a pun.
+Titles are short phrases of four to nine words, concrete, and drawn from what the beat actually contains. "The night the van does not start." "What she is like around her brother." Don't use a theme and don't use a pun.
 
 WHERE and WHEN are advisory. WHERE must be one of the place names given to you and nothing else. WHEN is a short phrase of elapsed time and time of day ("the following Tuesday, late"), and the gaps between beats should be uneven — days, then a week, then the same night.
 
@@ -128,10 +128,10 @@ FLOOR and CEILING are how many of the player's turns the beat must last at minim
 
 PHYSICAL ESCALATION ACROSS THE SPINE. This is an adult story and the body is part of it, but a route where everything happens in chapter two has nowhere to go. Across the beats, physical contact escalates ONE step at a time — proximity, then a first deliberate touch, then clothed heat, then undressed, then sex — and each step is a beat's job in its own right, not a thing that happens in passing during a beat about something else. Put the first genuinely physical beat somewhere in the middle third, never in the first two. At least one late beat should be about what the two of them are like AFTER, which is where a person is least able to perform.
 
-THE APPETITES. Write an "appetites" object for each person as specified in the brief you are given. It describes who they are, not what scenes to run: never write a beat whose job is to deliver an item off their list.
+THE APPETITES. Write an "appetites" object for each person as specified in the brief you are given. That object describes who they are rather than what scenes to run, so don't write a beat whose job is to deliver something off their list.
 
 THE THREE ENDINGS, written specifically for THIS person — a guarded person's bad ending is not a reckless person's bad ending:
-- "win": what it looks like when this actually works. Concrete and small. Not a wedding, not a declaration; a scene you could film.
+- "win": what it looks like when this actually works. Keep it concrete and small, something you could film, rather than a wedding or a declaration.
 - "loss": it does not happen, and why it does not, in this person's particular way of not happening.
 - "sour": THE INTERESTING ONE. The player gets what they were playing for and it is bad — wanted and not trusted, or kept and not liked, or two people who have ended up together out of momentum. Write it without judgement and without a moral.
 

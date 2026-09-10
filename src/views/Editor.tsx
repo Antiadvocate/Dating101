@@ -174,26 +174,26 @@ export default function Editor({ save, setSave, charId, onBack }: {
               number, and a sentence beats a field every time. Statements about the past are left alone.
             </div>
             <Field label="Background — who she is apart from the story" rows={7} value={d.background} onChange={set("background")}
-              hint="Bedrock. The engine never rewrites this." />
+              hint="Nothing in the game ever rewrites this, so whatever you put here stays the way you wrote it." />
             <Field label="Life history — what has happened in play" rows={4} value={d.life_history} onChange={set("life_history")}
-              hint="Accreted during the game and compressed when it gets long. Safe to edit; safe to empty." />
+              hint="This builds up as you play, and gets compressed once it runs long. You can edit it or clear it out entirely without breaking anything." />
             <Field label="Core traits — one per line" rows={4} value={d.core_traits} onChange={set("core_traits")} />
             <Field label="Values — one per line" rows={3} value={d.values} onChange={set("values")} />
             <Field label="Texture — small standing things, one per line" rows={4} value={d.texture} onChange={set("texture")}
-              hint="Surfaced lightly in quiet moments. A bird she watches for, an argument she keeps having. Never the meal." />
+              hint="Small things that come up when a scene has room for them — a bird she watches for, an argument she keeps having about a road. They shouldn't ever be what a scene is about." />
           </>
         )}
 
         {tab === "looks" && (
           <>
             <Field label="Appearance — the constants" rows={5} value={d.appearance_facts} onChange={set("appearance_facts")}
-              hint="Face, hair, eyes, build, one distinguishing mark. No clothes. Only permanent bodily events ever append to this." />
+              hint="Her face, hair, eyes, build, and one thing you'd pick her out by. Leave clothes out of it, since those go in the field below. Nothing gets added here except permanent physical changes." />
             <Field label="Right now — clothes, state, visible condition" rows={3} value={d.appearance_now} onChange={set("appearance_now")}
-              hint="Freely rewritten by the engine as the story changes it." />
+              hint="The engine rewrites this as the story changes what she's wearing or what shape she's in." />
             <Field label="Beauty (0–100)" value={d.beauty} onChange={set("beauty")}
-              hint="The snap read a stranger gets before anything else. 50 is ordinary, 75+ turns heads. Personal taste is applied on top of it per person." />
+              hint="Roughly how she reads to a stranger at a glance, before anything else about her registers. Around 50 is ordinary and 75 or over turns heads. Each character's own taste gets applied on top of this." />
             <Field label="Image words" rows={3} value={d.visual_signature} onChange={set("visual_signature")}
-              hint="The exact words that drew her portrait, reused verbatim in every scene picture so the face does not drift. Only the local diffusion path reads it." />
+              hint="The words that produced her portrait, reused unchanged in every scene picture so her face stays recognisable. This only matters if you're generating images locally." />
           </>
         )}
 
@@ -215,32 +215,32 @@ export default function Editor({ save, setSave, charId, onBack }: {
             <Field label="Agenda — what she is angling for under the words" rows={2} value={d.v_agenda} onChange={set("v_agenda")} />
             <Field label="Tics — one per line, used sparingly" rows={2} value={d.v_tics} onChange={set("v_tics")} />
             <Field label="Never says — one per line" rows={3} value={d.v_never} onChange={set("v_never")}
-              hint="Constructions she could not produce, not warmth she might deploy. The engine checks her actual lines against this and corrects the narrator when one slips through." />
+              hint="Put things she genuinely couldn't say here, rather than things she'd be too guarded to say. Somebody who works other people says sorry and please constantly and means none of it, so listing those would take her tools away and leave you with a plain bully. The engine checks her dialogue against this and corrects the narrator when something slips through." />
             <Field label="Example lines — one per line" rows={4} value={d.v_examples} onChange={set("v_examples")}
-              hint="The narrator imitates these, so a line that anyone could say teaches her to sound like anyone." />
+              hint="The narrator copies these fairly closely, so if a line here could have come from anybody, she'll start sounding like anybody." />
           </>
         )}
 
         {tab === "desire" && (
           <>
             <Field label="Attracted to" value={d.attracted_to} onChange={set("attracted_to")}
-              hint="A hard gate, not a preference: women / men / anyone / no one. Who this person can want at all." />
+              hint="Who this person is capable of wanting at all — women, men, anyone, or nobody. The engine treats it as a hard limit rather than a leaning, so it won't get overridden by how well things are going." />
             <Field label="Taste — what her history trained her to find attractive" rows={3} value={d.taste} onChange={set("taste")}
-              hint="Habituated, not chosen, and not the same as who she likes." />
+              hint="What her life trained her to find attractive, which isn't something she decided on and isn't the same as who she likes." />
 
             <Mark accent>Appetites</Mark>
             <Field label="Into — what she wants and would say so" rows={5} value={d.a_into} onChange={set("a_into")} />
             <Field label="Curious — has not, would try" rows={3} value={d.a_curious} onChange={set("a_curious")} />
             <Field label="How she is about it" rows={3} value={d.a_register} onChange={set("a_register")}
-              hint="The manner, not the acts. Talkative or silent, careful or careless, whether she laughs, whether she can ask for anything at all. Two people who want identical things are completely different here." />
+              hint="How she is about it, rather than what she does — whether she talks the whole way through, whether she laughs, whether she can ask for anything directly. Two people can want exactly the same things and still be nothing alike, and this is where that shows up." />
             <Field label="The unsaid thing" rows={3} value={d.a_unsaid} onChange={set("a_unsaid")}
-              hint="One thing she wants and will not ask for. The narrator is never told what it is until it surfaces — it can only come out under conditions the player actually produced." />
+              hint="Something she wants but won't bring up herself. The narrator isn't told what it is, so it can only come out if a scene gets somewhere that would make a person risk saying it." />
             <button className="chip" data-on={unsaidFound ? "true" : "false"} onClick={() => setUnsaidFound(!unsaidFound)}
               style={{ marginTop: -14, marginBottom: 26 }}>
               {unsaidFound ? "◉" : "○"} it has surfaced
             </button>
             <Field label="Limits — will not, ever" rows={4} value={d.a_limits} onChange={set("a_limits")}
-              hint="Hard. She refuses, plainly, and the refusal is a scene rather than a failure. At least one should sit right next to something on the into list, or it is a fence around empty ground." />
+              hint="She'll refuse these outright, and the refusal plays as a scene rather than as the game blocking you. Try to put at least one of them near something she does want, otherwise the limit isn't costing her anything to hold." />
 
             <Mark>Common tags</Mark>
             <div className="ui" style={{ fontSize: 11.5, color: "var(--ink-faint)", marginBottom: 12, lineHeight: 1.55 }}>
@@ -269,10 +269,10 @@ export default function Editor({ save, setSave, charId, onBack }: {
             </div>
             <Field label="Warmth (−100…100) — liking" value={d.e_warmth} onChange={set("e_warmth")} />
             <Field label="Wanting (−100…100) — desire, which is not liking" value={d.e_attraction} onChange={set("e_attraction")}
-              hint="Raising this also raises the ceiling on it, or the engine would quietly pull it back down toward her conditioned first read." />
+              hint="If you raise this, the ceiling on it goes up too. Otherwise the engine pulls it back down over the next few turns toward whatever her first impression of you was." />
             <Field label="Trust (−100…100)" value={d.e_trust} onChange={set("e_trust")} />
             <Field label="Roles — comma separated" value={d.e_roles} onChange={set("e_roles")}
-              hint="Tracked facts, and more than one at once is normal: boss and girlfriend, older sister and rival." />
+              hint="These get tracked as facts, and somebody can easily be two things at once — boss and girlfriend, or older sister and rival." />
             <Field label="Note — the last thing recorded between you" rows={3} value={d.e_notes} onChange={set("e_notes")} />
           </>
         )}

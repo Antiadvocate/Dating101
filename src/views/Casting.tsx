@@ -127,7 +127,7 @@ export default function Casting({ onBack, onCast }: {
                   </div>
                 </div>
                 <Field label="You" rows={7} value={you} onChange={setYou}
-                  hint="Three or four sentences does more than twenty. Include one thing that is unflattering."
+                  hint="Three or four sentences will get you further than twenty, and it helps to put in something unflattering."
                   placeholder="Thirty-four. Moved back in March after the thing with the flat fell through, which I still describe as a landlord problem. I fix espresso machines, which is a real trade and pays like a hobby. I am good in a room full of strangers and terrible with anyone who already knows me." />
               </>
             )}
@@ -251,7 +251,7 @@ export default function Casting({ onBack, onCast }: {
                 <Mark>Never</Mark>
                 <Field label="Things this story will not contain" rows={3} value={limits} onChange={setLimits}
                   placeholder="one per line, or comma separated"
-                  hint="Held on every single call the game makes, not just at world creation. Separately and always: every character is an adult, and there is no setting for that." />
+                  hint="This goes into every call the game makes, rather than being mentioned once when the world gets built — a rule set at the start is one the model has stopped noticing by turn forty. Everyone in the game is always an adult as well, and that part isn't adjustable." />
               </>
             )}
 

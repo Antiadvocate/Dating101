@@ -79,7 +79,7 @@ export default function Studio({ save, setSave, onClose }: {
         <Mark>The key</Mark>
         <Field label="OpenRouter key" value={key} onChange={setKey} type="password"
           placeholder="sk-or-v1-…"
-          hint="Stored in this browser and sent to openrouter.ai and nowhere else. There is no server here to keep it on. Get one at openrouter.ai/keys." />
+          hint="Your key stays in this browser and only ever goes to openrouter.ai, because there's no server in this thing to keep it on. You can get one at openrouter.ai/keys." />
 
         <Mark>Who writes it</Mark>
         <ModelPicker label="Narrator — the prose" role="narrator" value={narr} onChange={setNarr} />
@@ -88,7 +88,7 @@ export default function Studio({ save, setSave, onClose }: {
         <Mark>How it looks</Mark>
         <ModelPicker label="Image model" role="image" value={img} onChange={setImg} />
         <Field label="Art direction" value={art} onChange={setArt}
-          hint="Set once, governs everything drawn." />
+          hint="You set this once and it applies to every picture the game draws." />
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: -12, marginBottom: 26 }}>
           {STYLES.map((s) => (
             <button key={s} className="chip" data-on={art === s ? "true" : "false"}
@@ -126,7 +126,7 @@ export default function Studio({ save, setSave, onClose }: {
               ))}
             </div>
             <Field label="Never — one per line" rows={3} value={limits} onChange={setLimits}
-              hint="Pasted into every call this game makes, not stated once at the start. Separately and always: every character is an adult, and there is no setting for that." />
+              hint="This goes into every call the game makes, rather than being mentioned once when the world gets built — a rule set at the start is one the model has stopped noticing by turn forty. Everyone in the game is always an adult as well, and that part isn't adjustable." />
             {!!save.dating.heat.palette.length && (
               <div className="ui" style={{ fontSize: 11.5, color: "var(--ink-faint)", marginTop: -14, marginBottom: 26, lineHeight: 1.6 }}>
                 Palette set at casting: {save.dating.heat.palette.join(" · ")}. It seeded the cast and

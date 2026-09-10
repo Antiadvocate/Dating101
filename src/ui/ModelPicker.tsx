@@ -40,10 +40,10 @@ interface ORModel {
 export type Role = "forge" | "narrator" | "bookkeeper" | "image";
 
 const ROLE_NOTE: Record<Role, string> = {
-  forge: "One call, at the start, that decides the quality of everything after it. This is the slot to spend on.",
-  narrator: "Once a turn, on a large prompt. This is the entire bill of a campaign — everything else is rounding.",
-  bookkeeper: "Strict JSON on a small prompt, several times a turn. Wants fast and cheap, not clever.",
-  image: "Portraits and scene pictures. The Gemini flash-image family takes the portraits as references, which is what keeps a face recognisable between scenes.",
+  forge: "Makes one call at the start, and the quality of everything afterwards rests on it, so this is the slot worth spending on.",
+  narrator: "Runs once a turn on a large prompt, which makes it almost the entire cost of a campaign. Everything else is rounding.",
+  bookkeeper: "Does the bookkeeping several times a turn on small prompts, so it wants something fast and cheap rather than something clever.",
+  image: "Draws the portraits and the scene pictures. The Gemini flash-image models can take the portraits as reference images, which is what keeps a face recognisable from one scene to the next.",
 };
 
 /** Ids worth putting in front of somebody for each slot. Shown only when the

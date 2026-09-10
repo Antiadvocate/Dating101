@@ -29,42 +29,53 @@
  * saying it on their behalf.
  */
 
-export const NO_TROPES = `FORBIDDEN, in narration (a character may still SAY any of it out loud):
-- Bodies used as emotional shorthand: breath catching, hearts hammering or stuttering, pulses quickening, stomachs dropping or flipping, chests tightening, throats going dry, flushes climbing necks, butterflies. If a body does something, it must be something an observer in the room could see and it must not be there to tell the reader how to feel.
-- Faces doing unreadable things: an expression that cannot be placed, something flickering across a face, an emotion the narration names but declines to explain, eyes that are unreadable or guarded or searching.
-- Charged air: electricity, tension, a charge, the space between them, air that is thick or heavy with anything.
-- Voices doing the work: a voice rough with feeling, barely above a whisper, thick, unsteady, or lower than it was.
-- Lips: bitten, worried, parted. Once per story is already too much.
-- The chosen-one line: nobody has ever, you are not like other people, this has never happened before, I did not know it could be like this.
-- Any sentence stating what a person feels, wants, knows, realises, decides, or has just understood. The camera is in the room and has no access to anyone's interior.
-- Any closed general truth about love, people, women, men, or life — in narration OR in dialogue. No aphorisms, no maxims, no proverbs, no "that is what X does". If a sentence would work as a caption on a photograph of a sunset, delete it.
-- Characters describing the conversation they are having while having it.
+export const NO_TROPES = `HOW PEOPLE TALK AND HOW THE PAGE DESCRIBES THEM
 
-WRITE INSTEAD: what is done, what is said, what is in the room, what somebody is holding, what they do with their hands while they are not talking, what they get wrong, what they decline to answer. Specific, plain, and uninterested in being beautiful.`;
+Most of what anybody says is unremarkable, and that is what makes the occasional good line land. If every line out of somebody's mouth is clever, or pointed, or has a little twist at the end of it, they stop reading as a person and start reading as a performance. Aim for most lines being flat — answers to questions, half-sentences, somebody saying the boring true thing. At most one line in a whole scene should be the memorable one, and plenty of scenes should not have one at all.
+
+Don't have a character comment on the conversation they are in the middle of having. Nobody says "that's a very specific compliment" or "you're deflecting" or "that's not really an answer." People just respond to the thing, or don't.
+
+Don't let anybody say a sentence that would work equally well in any other story, said by anyone, to anyone. That includes anything shaped like a general observation about people, or love, or how things go — even when it is dressed up as a specific remark about the moment. If you could put the line on a poster, it is wrong.
+
+Names in dialogue are rare. In real speech you almost never say the name of the person you are talking to, and using it constantly is one of the clearest signs that a machine wrote the exchange. Once in a scene, at most, and usually to get somebody's attention or because they are about to be told something serious.
+
+Don't describe an expression without saying what it is. Writing that somebody's mouth did something at the corner, or that something crossed their face, or that their eyes did something you decline to name, is a way of implying a moment was significant without doing the work. Either say what the face did in plain words, or leave the face alone and describe what she does with her hands.
+
+Don't tell the reader what anyone feels, wants, knows, decides, or has just worked out. You have access to what somebody standing in the room could see and hear, and nothing else.
+
+Don't use the body as shorthand for a feeling. Breath catching, hearts hammering, stomachs dropping, throats going dry, flushes climbing necks, chests tightening — all of that is a way of telling the reader how to feel without giving them anything to look at.
+
+Don't charge the atmosphere. The air between them, the silence, the steam, the space — none of these should be carrying meaning. If a moment is loaded, it is loaded because of what somebody just said.
+
+Don't write in the shape of "not that, just this." Sentences like "she said it slowly, not mocking, just testing how it sat" put a correction in front of the reader instead of an image, and they are a habit rather than a description. Say the thing you mean once.
+
+Don't put a simile in front of an interior to smuggle it in. "She said it flat, like she was weighing it" is still telling the reader what she was doing in her head.
+
+WRITE INSTEAD: what people do while they are talking, what they are holding, what they get wrong, what they don't answer, what somebody has to move out of the way, what the room sounds like. Let people be boring. Let a line land badly and nobody remark on it. A character is allowed to say "yeah" and nothing else.`;
 
 /**
- * The same job for the sex, and it is a harder one, because the failure mode of
- * generated erotica is not that it is too explicit — it is that it goes
- * ABSTRACT at precisely the moment it should get specific. The prose is fine
- * until clothes come off and then every noun turns into a euphemism, every verb
- * turns into weather, and two particular people become anybody.
+ * The same job for sex, where the failure has a different shape.
  *
- * The rule is that a sex scene is written like everything else in the story:
- * concretely, in ordinary words, about these two people in this room. If the
- * narration would not describe a meal as "waves of sustenance crashing over
- * her", it does not get to describe this that way either.
+ * Generated sex writing usually goes abstract at exactly the point it should
+ * get specific. The prose holds up fine until clothes come off, and then the
+ * nouns turn into euphemisms and the verbs turn into weather, and two people
+ * who were distinct a paragraph ago become anybody.
  */
-export const NO_PURPLE = `WRITING SEX. It is written exactly like the rest of the prose: plain nouns, plain verbs, specific to these two people, in this room, tonight. The failure to avoid is not being too explicit — it is going vague at the moment it matters.
+export const NO_PURPLE = `WRITING SEX
 
-FORBIDDEN, in narration:
-- Euphemism for anatomy. No core, heat, sex, womanhood, manhood, length, member, entrance, folds, bud, petals, flower, velvet, or any word chosen to avoid the ordinary one. Use the ordinary one, or describe what is being done without naming the part.
-- Weather and physics as feeling: waves, jolts, shocks, sparks, electricity, currents, fire, being consumed, shattering, coming undone, unravelling, falling apart, seeing stars, the world narrowing.
-- Superlatives with nothing under them: more than she could take, better than anything, never felt like this, beyond anything.
-- The body as a separate agent: her body betrayed her, responded of its own accord, could not help itself. People do things. Bodies do not overrule them.
-- Blunt-force verbs used as intensity: pounded, slammed, impaled, buried himself, filled her completely.
-- Stating what anyone feels. Same rule as everywhere else in this story: the camera is in the room.
+Write it the same way you write everything else in this story: plain nouns, plain verbs, these two specific people, in this room, tonight. The thing to avoid is not explicitness, it is vagueness.
 
-WRITE INSTEAD: who is doing what, in what order, what they say, what they get wrong, what is awkward, what they have to move, what one of them stops to do, what the room sounds like. Two people who have done this before are different from two who have not, and both are different from these two. Somebody laughs. Somebody's arm goes dead. That is the material.`;
+Don't use euphemisms for body parts. No core, heat, sex, entrance, folds, length, member, womanhood, manhood, bud, petals, velvet. Use the ordinary word for the thing, or describe what is being done without naming the part at all.
+
+Don't use weather or physics for sensation. No waves, jolts, sparks, currents, electricity, fire, shattering, coming undone, unravelling, seeing stars, the world narrowing to a point.
+
+Don't reach for superlatives with nothing under them — better than anything, more than she could take, never like this before.
+
+Don't make the body a separate character that overrules the person. Nobody's body betrays them or responds of its own accord. People do things.
+
+Don't use blunt force verbs as a way of signalling intensity: pounded, slammed, buried, impaled, filled completely.
+
+WRITE INSTEAD: who does what, in what order, what gets said, what is awkward, what has to be moved, what somebody stops to do, what one of them laughs at, whose arm has gone dead. Two people doing this for the first time are different from two people who have done it a hundred times, and both are different from these two.`;
 
 export interface Tic {
   family: string;
@@ -94,19 +105,40 @@ const FAMILIES: { family: string; patterns: RegExp[] }[] = [
     ],
   },
   {
-    family: "the unreadable face",
+    // Broadened after a passage where every one of these fired in a reader's
+    // head and not one of them fired here. The old patterns matched specific
+    // wordings ("something unreadable crossed her face") and the model simply
+    // wrote the same move in words I had not thought of: "her mouth does
+    // something small at the corner". The move is a face doing an unnamed
+    // thing, so match the move.
+    family: "the unnamed expression",
     patterns: [
       /\bsomething\s+(?:unreadable|indecipherable|unnameable|she couldn't|he couldn't|they couldn't|you couldn't)\b/i,
-      /\bsomething\s+\w{3,12}\s+(?:flicker\w*|flit\w*|cross\w*|pass\w*|move\w*)\s+(?:across|over|behind)\s+(?:h(?:er|is|their)|the)\s+(?:face|eyes|features)/i,
+      /\bsomething\s+\w{0,12}\s*(?:flicker\w*|flit\w*|cross\w*|pass\w*|move\w*|shift\w*)\s+(?:across|over|behind|through)\s+(?:h(?:er|is|their)|the)\s+(?:face|eyes|features|mouth)/i,
       /\ban?\s+expression\s+(?:\w+\s+){0,3}(?:couldn't|could not|cannot)\s+(?:place|read|name)/i,
       /\beyes\s+(?:were\s+)?(?:unreadable|guarded|searching|shuttered|veiled)\b/i,
-      /\b(?:h(?:er|is|their))\s+face\s+(?:did something|closed off|shuttered)\b/i,
+      // the whole family in one: any facial feature "doing something"
+      /\b(?:h(?:er|is|their)|the)\s+(?:face|mouth|eyes|jaw|features|expression)\s+(?:did|does|do|doing)\s+(?:something|a thing)\b/i,
+      /\b(?:did|does)\s+something\s+(?:small|complicated|private|quiet|brief|odd|strange)\b/i,
+      /\b(?:h(?:er|is|their))\s+(?:face|expression)\s+(?:closed off|shuttered|went somewhere)\b/i,
+    ],
+  },
+  {
+    // "not mocking, just fitting the sentence into her mouth" — a correction
+    // handed to the reader in place of an image, and one of my own habits that
+    // went into the prompts and came straight back out in the prose.
+    family: "negate and correct",
+    patterns: [
+      /,\s*not\s+\w+(?:ing|ed|ly)?\s*,\s*(?:just|only|merely|simply)\s+\w+/i,
+      /\bnot\s+(?:because|that)\s+[^.,;]{4,40},\s*(?:just|but)\s+(?:because|that)\b/i,
+      /\bnot\s+\w{3,14},\s+(?:exactly|quite)[.,]/i,
     ],
   },
   {
     family: "charged air",
     patterns: [
-      /\bthe\s+(?:air|space|silence)\s+between\s+(?:them|you|us)\b/i,
+      /\bthe\s+(?:air|space|silence|steam|quiet|distance)\s+between\s+(?:them|you|us|the two of you)\b/i,
+      /\b(?:curl\w*|hang\w*|sat|sits|settle\w*|rose|rises)\s+(?:up\s+)?between\s+the\s+two\s+of\s+(?:you|them)\b/i,
       /\b(?:electricity|a charge|a current)\s+(?:between|in the air|passed)/i,
       /\bair\s+(?:was\s+)?(?:thick|heavy|charged|crackl\w*)\s+with\b/i,
       /\b(?:tension|awareness)\s+(?:hummed|crackled|thickened|stretched)\b/i,
@@ -256,13 +288,16 @@ export function findTics(prose: string, limit = 4): Tic[] {
  *  detectors work exactly this way and it is the only correction mechanism in
  *  the engine that reliably changes behaviour — a rule in the system prompt is
  *  read as reference, a sentence you just wrote is read as a mistake. */
-export function ticCorrection(tics: Tic[]): string {
-  if (!tics.length) return "";
-  const list = tics.slice(0, 3).map((t) => `  "${t.phrase}" — ${t.family}`).join("\n");
+export function ticCorrection(tics: Tic[], faults: { quote: string; why: string }[] = []): string {
+  const lines = [
+    ...tics.slice(0, 3).map((t) => `  "${t.phrase}" — ${t.family}`),
+    ...faults.slice(0, 3).map((f) => `  "${f.quote}" — ${f.why}`),
+  ];
+  if (!lines.length) return "";
   return [
-    `LAST TURN YOU WROTE THESE, AND THEY ARE THE HOUSE STYLE OF BAD ROMANCE:`,
-    list,
-    `Do not write anything of that kind this turn. Write what is done and said instead. If you cannot find a way to make a moment land without reaching for a body part or a charged silence, then let it not land — an ordinary moment written plainly is worth more than a charged one written like everybody else's.`,
+    `Here are sentences from the turn you just wrote that are not working:`,
+    ...lines,
+    `Don't write anything like those this turn. If you can't find a way to make a moment land without reaching for a face doing something unnamed, or a charged silence, or somebody saying a line that could go on a poster, then let the moment not land. An ordinary exchange written plainly is worth more than a charged one written the way everybody else writes it.`,
   ].join("\n");
 }
 
