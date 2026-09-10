@@ -3,7 +3,7 @@ import { activeArc, currentBeat, type Save } from "../game/types";
 import { RUNGS, rungLabel } from "../game/appetite";
 import { heatOf } from "../game/arc";
 import {
-  forceEnding, forceGate, jumpToBeat, load, reopenRoute, revealAppetites,
+  editEdge, forceEnding, forceGate, jumpToBeat, load, reopenRoute, revealAppetites,
   rereadVoice, rewriteOpening, rollback, setGodMode, setRung, setTime, weft,
 } from "../game/api";
 import { Mark } from "../ui/kit";
@@ -72,7 +72,8 @@ export default function Debug({ save, setSave, onEdit, onPlay }: {
               ["in chapter", beat?.entered_turn != null ? `${save.world.current_turn - beat.entered_turn} turns (floor ${beat.floor}, ceiling ${beat.ceiling})` : "—"],
               ["gate", save.dating.gate ? `open · ${save.dating.gate.because}` : "closed"],
               ["ladder", arc ? `${arc.rung ?? 0} — ${rungLabel(arc.rung ?? 0)}` : "—"],
-              ["heat", h ? `warmth ${h.warmth} · wanting ${h.attraction} · trust ${h.trust} → ${h.value}` : "—"],
+              ["heat", h ? `warmth ${Math.round(h.warmth)} · wanting ${Math.round(h.attraction)} · trust ${Math.round(h.trust)} → ${h.value}` : "—"],
+              ["ceiling on wanting", h ? `${Math.round(h.base)}${h.base < 15 ? "  (a flat first read — see below)" : ""}` : "—"],
               ["explicitness", save.dating.heat.explicitness],
               ["god mode", save.world_bible.god_mode ? "on" : "off"],
             ].map(([k, v]) => (
@@ -173,6 +174,15 @@ export default function Debug({ save, setSave, onEdit, onPlay }: {
             <Row note="Every field on her: name, age, looks, history, voice, appetites, limits, and the three numbers.">
               <button className="btn btn-ink" onClick={() => onEdit(arc.char_id)}>Open the editor</button>
             </Row>
+            {h && h.base < 15 && (
+              <Row note="Her first read of you was flat, which caps how far wanting can ever go no matter how well the route is played. This raises that cap to 45 and lifts current wanting to meet it. It is a thumb on the scale and it is yours to put there.">
+                <button className="btn" disabled={!!busy}
+                  onClick={() => run("raise the ceiling", () =>
+                    editEdge(save.id, arc.char_id, { attraction: Math.max(45, Math.round(h.attraction)) }))}>
+                  {busy === "raise the ceiling" ? "…" : "Let her want you"}
+                </button>
+              </Row>
+            )}
             <Row note="Hand yourself everything on her card — wants, limits, and the thing she was not going to say. One way. You cannot un-know it.">
               <button className="btn" disabled={!!busy}
                 onClick={() => run("reveal appetites", () => revealAppetites(save.id, arc.char_id))}>

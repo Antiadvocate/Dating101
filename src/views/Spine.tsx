@@ -107,6 +107,11 @@ export default function Spine({ save, setSave, onPlay }: {
                     <div className="ui" style={{ fontSize: 12, color: "var(--ink-lo)", marginBottom: 6 }}>
                       {beat.when}{beat.where ? ` · ${beat.where}` : ""}
                     </div>
+                    {beat.caption && (
+                      <div className="display-i" style={{ fontSize: 13.5, color: "var(--ink-lo)", marginBottom: 6 }}>
+                        {beat.caption}
+                      </div>
+                    )}
                     {beat.opening && (
                       <div className="ui" style={{
                         fontSize: 12.5, color: "var(--ink-mid)", lineHeight: 1.55, marginBottom: 6,

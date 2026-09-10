@@ -173,9 +173,14 @@ export function readOf(s: AnySave, char_id: string): Reading {
      one the player thinks they are working toward. Nothing about the prose will
      ever say this, and a player who is not told will keep trying harder at a
      door that does not open. */
+  /* The old threshold on this required warmth above 30 before it would say
+     anything, and the save that prompted it sat at 25.7 — so the one route in
+     the game that could not be won by playing it well reported nothing at all.
+     A low ceiling is worth saying whatever the warmth is doing, because it is
+     the only state in here that no amount of good play will move. */
   let caution: string | null = null;
-  if (h.base < 5 && h.attraction < 22 && h.warmth > 30) {
-    caution = "The first read was flat, and being good to her will not turn into wanting. It can become something — it is not going to become that.";
+  if (h.base < 15) {
+    caution = "Her first read of you was close to flat, and that sets a ceiling on how far wanting can go — being good to her lifts liking, not this. It can still become something; it is not going to become that. The console can raise the ceiling if this is not the game you wanted.";
   } else if (h.attraction >= 45 && h.trust <= 8) {
     caution = "She wants you and tells you nothing. That is a shape this can end in, and it is not the good one.";
   } else if (h.warmth <= -30 && h.attraction >= 35) {

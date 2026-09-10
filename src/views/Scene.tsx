@@ -335,7 +335,9 @@ function Opening({ beat, onZoom, error, onRewrite }: {
     <div style={{ marginBottom: 34 }}>
       <div style={{ display: "flex", gap: 20, alignItems: "flex-start", flexWrap: "wrap", maxWidth: "var(--measure)" }}>
         <div style={{ flex: "1 1 280px", minWidth: 220 }}>
-          <div className="label label-accent" style={{ marginBottom: 8 }}>{beat.when}</div>
+          <div className="label label-accent" style={{ marginBottom: 8 }}>
+            {beat.when}{beat.caption ? ` — ${beat.caption}` : ""}
+          </div>
           <div className="display-i" style={{ fontSize: 19, lineHeight: 1.45, color: "var(--ink)" }}>
             {beat.opening}
           </div>

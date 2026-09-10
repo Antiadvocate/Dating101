@@ -427,15 +427,17 @@ Look for these and nothing else:
 
 2. A line of dialogue or narration that would work in any other story, said by anyone, to anyone — anything shaped like a general truth about people, love, or how things go, even when dressed as a remark about the moment. ("That's a choice you make in front of a witness.")
 
-3. A face or an expression doing something the writer declines to name. ("Her mouth does something small at the corner.")
+3. A face or an expression doing something the writer DECLINES TO NAME. "Her mouth does something small at the corner" qualifies, because you are not told what it did. A body part doing a specific, named, watchable thing does not qualify and is exactly what this story wants — "her hand goes to the hem of her shirt and smooths it once" is good writing and must never be flagged. If you can picture it, leave it alone.
 
-4. The narration stating what somebody feels, wants, knows, or has just worked out, including when a simile is put in front of it to disguise it.
+4. The NARRATION stating what somebody feels, wants, knows, or has just worked out, including when a simile is put in front of it to disguise it. This applies only outside quotation marks. A character is allowed to say "I remember the sound" or "I know I had them" or anything else about their own head, because people say things like that constantly, and a line of dialogue must never be flagged under this rule.
 
 5. The shape "not that, just this" used in place of an actual description. ("She said it slowly, not mocking, just testing how it sat.")
 
 6. Somebody's name used in dialogue when there is no reason for it. People rarely say the name of the person in front of them.
 
 7. Dialogue where nearly every line is doing something clever or pointed. If three or more consecutive lines from the same person each land a little turn or a joke, quote the third one and say the talking is too consistently performed.
+
+RULES 3, 4 AND 5 APPLY TO NARRATION ONLY. Before flagging anything under them, check whether it sits inside quotation marks; if it does, it is somebody speaking and it is not yours to correct.
 
 Be strict about what you quote and generous about letting ordinary writing pass. Most turns should return one or two findings, and a clean turn should return none. Do not quote something merely because it is a bit flat, and never quote a line for being too plain — plain is what we want.
 

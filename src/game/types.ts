@@ -50,8 +50,19 @@ export interface Beat {
   /** A place NAME (resolved against the world's gazetteer at entry, created if
    *  it does not exist). Advisory — a door can move it. */
   where: string;
-  /** Flavour and a time-skip hint: "a Thursday, late", "three weeks later". */
+  /** HOW LONG SINCE THE LAST CHAPTER, and nothing else. "A week later, a
+   *  Saturday night". Three separate things read this — the spine prints it, the
+   *  chapter transition parses it to decide how many days the interlude covers,
+   *  and the narrator's directive states it as the gap that has passed — so
+   *  anything written here that is not a span of time breaks all three at once.
+   *  It did: the opening call returns a caption as well, and that caption was
+   *  being assigned over the top of this field, turning one save's chapter two
+   *  into "a brass key ring resting against the dark upholstery has passed since
+   *  the last scene". Captions go in `caption`. */
   when: string;
+  /** A line of physical detail from the scene, printed under the chapter title.
+   *  Decoration, read by nothing. */
+  caption?: string;
   /** Turns that must pass inside the beat before the gate may open. Stops a
    *  two-line scene from resolving the whole thing. */
   floor: number;

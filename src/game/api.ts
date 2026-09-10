@@ -145,7 +145,8 @@ export async function openBeat(id: string): Promise<ClientSave> {
     const written = await openingFor(s, smallModel(s));
     if (written) {
       beat.opening = written.opening;
-      if (written.title_line) beat.when = written.title_line;
+      // NOT beat.when. See the comment on Beat.when in game/types.ts.
+      if (written.title_line) beat.caption = written.title_line;
     } else {
       /* THE CALL FAILED, AND A CHAPTER WITH NO OPENING IS A BLANK SCREEN THE
          PLAYER HAS TO GUESS AT. This is not good writing and is not meant to

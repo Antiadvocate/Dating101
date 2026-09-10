@@ -22,6 +22,7 @@ import { DEFAULT_MODELS } from "@weft/engine/types";
 import type { SaveState, Identity } from "@weft/engine/types";
 import { ROUTE_ACCENTS, type AnySave, type Arc, type Beat, type DatingLayer, type Terminal } from "./types";
 import { enterBeat } from "./arc";
+import { seedAttraction } from "@weft/engine/desire";
 import { appetiteBrief, adultAge, emptyAppetites, EXPLICITNESS, HARD_FLOOR, type Appetites, type Explicitness } from "./appetite";
 
 export interface Brief {
@@ -163,6 +164,10 @@ const clampInt = (v: unknown, lo: number, hi: number, dflt: number) => {
 const NOT_A_PLACE = /^(elsewhere|somewhere|anywhere|nowhere|tbd|unknown|various|outside|out)$/i;
 
 function resolveWhere(raw: unknown, places: string[], idx: number): string {
+  // Weft keeps an off-scene bucket in the gazetteer as an ordinary place called
+  // "elsewhere", so filtering by name was not enough — it passed the check by
+  // genuinely being in the list, and one save opened a chapter there.
+  places = places.filter((p) => !NOT_A_PLACE.test(p.trim()));
   const want = String(raw ?? "").trim();
   if (want && !NOT_A_PLACE.test(want)) {
     const hit = places.find((p) => p.toLowerCase() === want.toLowerCase())
@@ -350,6 +355,26 @@ export async function runCasting(input: CastingInput, onPhase: CastingProgress =
       state: "running",
     };
   });
+
+  /* HER FIRST READ OF THE PLAYER, TAKEN NOW.
+   *
+   *  Weft seeds attraction lazily, the first time two people are in a room
+   *  together, and it seeds once and never again. In one save that produced a
+   *  love interest with attraction_base of 0 — while a colleague who is not
+   *  even a route sat at 35 toward the same player — and base is the ceiling on
+   *  how far warmth alone can lift wanting, so that route was not winnable by
+   *  playing it well. Her orientation said men, the player is a man, and her
+   *  taste described him almost exactly, so the reading was not the engine
+   *  disagreeing: it was the read being taken before the cards were finished.
+   *
+   *  Taking it here, with everybody's beauty, taste and orientation on the
+   *  record, uses Weft's own arithmetic at the one moment the inputs are all
+   *  present. seedAttraction returns early once an edge has a value, so the
+   *  lazy seed later becomes a no-op and nothing is seeded twice. */
+  for (const { char } of pairs) {
+    try { seedAttraction(save as unknown as SaveState, char.character_id, "char_player"); }
+    catch { /* a missing card is not worth failing casting over */ }
+  }
 
   const dating: DatingLayer = {
     version: 1,
