@@ -20,7 +20,7 @@
  * run and enormously cheaper to be wrong about.
  */
 import { complete, buildMessages, extractJson, repairJson } from "@weft/llm";
-import type { SaveState } from "@weft/engine/types";
+import { DEFAULT_MODELS, type SaveState } from "@weft/engine/types";
 import type { Arc, Beat, Door, Terminal } from "./types";
 import { activeArc, currentBeat } from "./types";
 import { heatOf, edgeToPlayer, OUTCOME_WORD } from "./arc";
@@ -234,7 +234,7 @@ export async function doorsFor(s: SaveState, model: string, because: "discharged
   ].join("\n");
 
   let doors: Door[] = [];
-  for (const m of [model, model]) {
+  for (const m of [model, model, DEFAULT_MODELS.fallback_model]) {
     try {
       const out = await complete(buildMessages(DOORS_SYSTEM, "DOORS", volatile, m), m, m, true, 900);
       const raw = safeJson<{ doors?: { label?: string; read?: string; bearing?: string }[] }>(out.text, {});
@@ -251,17 +251,15 @@ export async function doorsFor(s: SaveState, model: string, because: "discharged
     } catch { /* try again, then fall through */ }
   }
 
-  // THE BACKSTOP. A gate with no doors is an unplayable save, so there is always
-  // something to press. Plain rather than clever: the point is that the game
-  // does not stop.
-  if (doors.length < 2) {
-    doors = [
-      { id: uid("door"), label: "Stay a while longer and see where it goes", read: "You give up the excuse you had for leaving.", to: beat.idx + 1, bearing: "toward" },
-      { id: uid("door"), label: "Say goodnight and go", read: "Nothing is decided, and nothing is spent.", to: beat.idx + 1, bearing: "across" },
-      { id: uid("door"), label: "Say the thing you have not said", read: "It cannot be taken back once it is in the room.", to: beat.idx + 1, bearing: "toward" },
-    ];
-  }
-  return doors.slice(0, 3);
+  // NO BACKSTOP. There used to be three hardcoded doors here so that a failed
+  // call could never leave a gate empty, and one of them — "say the thing you
+  // have not said" — turned up in a real game as the permanent record of a
+  // choice somebody made. It is deliberately unspecific, because it was written
+  // to fit any scene, and reading it back on the spine tells you nothing about
+  // what you did. A gate that admits it could not be written is recoverable in
+  // one tap; a gate that quietly invents three portentous non-choices and
+  // writes one into the history is not.
+  return doors.length >= 2 ? doors.slice(0, 3) : [];
 }
 
 /* ── 4. THE ENDING ───────────────────────────────────────────────────────────*/
@@ -305,6 +303,56 @@ export async function endingFor(s: SaveState, arc: Arc, terminal: Terminal, mode
   } catch {
     return `${terminal.description}\n\n(The ending could not be written — the model call failed. Everything that happened is still in the journal, and you can try again from the spine.)`;
   }
+}
+
+/* ── 4b. WHAT HAPPENED WHEN YOU DID THAT ─────────────────────────────────────
+ *
+ *  The gap this fills was a real one, and it had a comment in walkThrough
+ *  claiming it was already handled. It was not. The player picked a door, the
+ *  clock jumped four days, and a new chapter opened — so the thing they had
+ *  chosen to do was never written, never seen, and never reached the world. The
+ *  spine recorded "you chose: say the thing you have not said" as the only
+ *  trace, which reads as a chapter having been skipped rather than played.
+ *
+ *  A choice you do not get to watch land is not a choice. So the door is played
+ *  now: a short passage of the player doing it and her answering, pushed through
+ *  Weft's bookkeeper like any other turn, so it moves the ledger before the beat
+ *  is graded and before any time passes. */
+
+const CONSEQUENCE_SYSTEM = `The player has just decided to do something, and you are writing what happens when they do it. You will be given the thing they chose, the scene it happens in, and where the two people stand with each other.
+
+Two or three short paragraphs, present tense, with the player as "you" and everybody else named. Write them doing the thing, and write how the other person answers it — what they say, what they do with their hands, whether they answer at all.
+
+Stop while it is still unfinished. This is the end of a chapter and not the end of the story, so don't resolve anything, don't have anybody explain how they feel about what just happened, and don't jump forward in time. If the choice was a bad idea, let it go badly and leave it gone badly.
+
+Don't summarise. Don't write a closing line. The last sentence should be a thing somebody does or says, not a reflection on it.
+
+${NO_TROPES}
+
+${NO_PURPLE}`;
+
+export async function consequenceFor(
+  s: SaveState, arc: Arc, door: Door, model: string,
+): Promise<string> {
+  const beat = currentBeat(arc);
+  const volatile = [
+    `WHAT THE PLAYER CHOSE TO DO: ${door.label}`,
+    door.read ? `What it commits them to: ${door.read}` : "",
+    ``,
+    standing(s, arc),
+    ``,
+    `THE SCENE THIS HAPPENS IN — the chapter called "${beat?.title ?? ""}", at ${beat?.where ?? "where they are"}:`,
+    recent(s, 2),
+    ``,
+    bounds((s as { dating?: DatingLayer }).dating),
+  ].filter(Boolean).join("\n");
+  try {
+    const out = await complete(
+      buildMessages(CONSEQUENCE_SYSTEM, "CONSEQUENCE", volatile, model),
+      model, model, false, 900,
+    );
+    return out.text.trim();
+  } catch { return ""; }
 }
 
 /* ── 5. THE VOICE CHECK ──────────────────────────────────────────────────────

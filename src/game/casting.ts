@@ -156,6 +156,24 @@ const clampInt = (v: unknown, lo: number, hi: number, dflt: number) => {
   return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : dflt;
 };
 
+/** Place names that are not places. "elsewhere" is Weft's own marker for
+ *  off-screen and the spine model reaches for it when it cannot decide, which
+ *  is how a real save ended up with a chapter set in "elsewhere" — printed on
+ *  the spine as the location, and impossible for openBeat to move anybody to. */
+const NOT_A_PLACE = /^(elsewhere|somewhere|anywhere|nowhere|tbd|unknown|various|outside|out)$/i;
+
+function resolveWhere(raw: unknown, places: string[], idx: number): string {
+  const want = String(raw ?? "").trim();
+  if (want && !NOT_A_PLACE.test(want)) {
+    const hit = places.find((p) => p.toLowerCase() === want.toLowerCase())
+      ?? places.find((p) => p.toLowerCase().includes(want.toLowerCase()) || want.toLowerCase().includes(p.toLowerCase()));
+    if (hit) return hit;
+  }
+  // Rotate rather than always taking the first, so a spine that fails to name
+  // its locations does not set all eight chapters in the same room.
+  return places.length ? places[idx % places.length] : "";
+}
+
 function normalizeBeats(raw: RawRoute["beats"], want: number, places: string[]): Beat[] {
   const out: Beat[] = [];
   for (const b of raw ?? []) {
@@ -167,7 +185,7 @@ function normalizeBeats(raw: RawRoute["beats"], want: number, places: string[]):
       id: uid("beat"),
       idx: out.length,
       title, job,
-      where: places.includes(String(b?.where ?? "")) ? String(b?.where) : (places[0] ?? ""),
+      where: resolveWhere(b?.where, places, out.length),
       when: String(b?.when ?? "").trim() || "later",
       floor: Math.min(clampInt(b?.floor, 2, 7, 4), ceiling - 2),
       ceiling,
@@ -368,7 +386,7 @@ function fallbackBeats(who: string, want: number, places: string[]): Beat[] {
   ];
   return jobs.slice(0, Math.max(3, want)).map(([title, job], i) => ({
     id: uid("beat"), idx: i, title, job,
-    where: places[i % Math.max(1, places.length)] ?? "",
+    where: resolveWhere(null, places, i),
     when: i === 0 ? "an ordinary evening" : "some days later",
     floor: i >= jobs.length - 2 ? 6 : 4,
     ceiling: i >= jobs.length - 2 ? 15 : 10,

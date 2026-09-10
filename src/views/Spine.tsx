@@ -107,6 +107,13 @@ export default function Spine({ save, setSave, onPlay }: {
                     <div className="ui" style={{ fontSize: 12, color: "var(--ink-lo)", marginBottom: 6 }}>
                       {beat.when}{beat.where ? ` · ${beat.where}` : ""}
                     </div>
+                    {beat.opening && (
+                      <div className="ui" style={{
+                        fontSize: 12.5, color: "var(--ink-mid)", lineHeight: 1.55, marginBottom: 6,
+                      }}>
+                        {beat.opening.length > 190 ? `${beat.opening.slice(0, 189)}…` : beat.opening}
+                      </div>
+                    )}
                     {beat.outcome && (
                       <div className="ui" style={{ fontSize: 12.5, color: "var(--ink-mid)", fontStyle: "italic" }}>
                         {OUTCOME_WORD[beat.outcome]}

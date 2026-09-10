@@ -57,6 +57,8 @@ export default function Scene({ save, setSave, onOpenSpine }: {
   const [busy, setBusy] = useState(false);
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [card, setCard] = useState(false);
+  /** The prose of the choice just taken, shown before the next chapter opens. */
+  const [played, setPlayed] = useState<string | null>(null);
   const [walking, setWalking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const abort = useRef<AbortController | null>(null);
@@ -127,10 +129,22 @@ export default function Scene({ save, setSave, onOpenSpine }: {
     setWalking(true); setError(null);
     try {
       const r = await walkThrough(save.id, d.id, setPhase);
+      if (r.played) setPlayed(r.played);
       setSave(r.save as Save);
     } catch (e: any) {
       setError(e?.message ?? "that did not go through");
     } finally { setWalking(false); setPhase(""); }
+  }, [save.id, walking, setSave]);
+
+  const retryDoors = useCallback(async () => {
+    if (walking) return;
+    setWalking(true); setError(null);
+    try {
+      const { forceGate } = await import("../game/api");
+      setSave(await forceGate(save.id, true) as Save);
+    } catch (e: any) {
+      setError(e?.message ?? "still not working");
+    } finally { setWalking(false); }
   }, [save.id, walking, setSave]);
 
   const shoot = useCallback(async () => {
@@ -263,7 +277,7 @@ export default function Scene({ save, setSave, onOpenSpine }: {
           {gate ? (
             <motion.div key="gate" initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
               transition={{ duration: 0.42, ease: [0.2, 0.7, 0.3, 1] }}>
-              <Doors gate={gate} busy={walking} phase={phase} onTake={takeDoor} />
+              <Doors gate={gate} busy={walking} phase={phase} onTake={takeDoor} onRetry={retryDoors} />
             </motion.div>
           ) : ended ? (
             <motion.div key="ended" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
@@ -288,7 +302,14 @@ export default function Scene({ save, setSave, onOpenSpine }: {
       </div>
 
       <AnimatePresence>
-        {card && beat.opening && (
+        {/* What you just did, before the chapter turns over. Without this the
+            consequence lands on the outgoing chapter's page and the player
+            never sees it — they choose a door, four days pass, and a new scene
+            opens with no account of the thing they chose. */}
+        {played && (
+          <Played text={played} names={names} onDone={() => setPlayed(null)} />
+        )}
+        {!played && card && beat.opening && (
           <TitleCard beat={beat} total={arc.beats.length} who={arc.name} onDone={() => setCard(false)} />
         )}
       </AnimatePresence>
@@ -325,11 +346,33 @@ function Opening({ beat, onZoom }: { beat: Beat; onZoom: (s: string) => void }) 
    Three, stacked, each a plate you can press. The `read` under each is what
    makes them worth reading rather than clicking: it says what the choice costs,
    never how it lands. */
-function Doors({ gate, busy, phase, onTake }: {
+function Doors({ gate, busy, phase, onTake, onRetry }: {
   gate: Gate | null;
-  busy: boolean; phase: string; onTake: (d: Door) => void;
+  busy: boolean; phase: string; onTake: (d: Door) => void; onRetry: () => void;
 }) {
   if (!gate) return null;
+
+  /* An empty gate used to be impossible, because three hardcoded doors were
+     substituted whenever the call failed — and one of them turned up in a real
+     save as the permanent record of a choice somebody made, saying nothing
+     about what they had actually done. Admitting the failure costs one tap. */
+  if (!gate.doors.length) {
+    return (
+      <div style={{ padding: "16px 20px 20px", maxWidth: 760 }}>
+        <div className="rule-with-word" style={{ marginBottom: 12 }}>
+          <span className="label">the chapter is over</span>
+        </div>
+        <div className="ui" style={{ fontSize: 13, lineHeight: 1.6, color: "var(--ink-mid)", marginBottom: 14 }}>
+          The three ways out of it couldn't be written — the model call failed. Nothing has been lost
+          and nothing has been decided; try again.
+        </div>
+        <button className="btn btn-accent" onClick={onRetry} disabled={busy}>
+          {busy ? "writing…" : "Try again"}
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div style={{ padding: "16px 20px 20px" }}>
       <div className="rule-with-word" style={{ marginBottom: 13 }}>
@@ -459,6 +502,27 @@ function TitleCard({ beat, total, who, onDone }: {
         </div>
         <div className="label" style={{ marginTop: 40 }}>tap to begin</div>
       </motion.div>
+    </motion.div>
+  );
+}
+
+/* ── WHAT YOU DID ──────────────────────────────────────────────────────────*/
+function Played({ text, names, onDone }: { text: string; names: Speaker[]; onDone: () => void }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      transition={{ duration: 0.4 }}
+      style={{
+        position: "absolute", inset: 0, zIndex: 710, background: "var(--paper)",
+        display: "flex", flexDirection: "column",
+      }}>
+      <div className="scroll center-page" style={{ flex: 1, minHeight: 0, padding: "56px 24px 20px" }}>
+        <div className="label label-accent" style={{ marginBottom: 18 }}>and so</div>
+        <Prose text={text} names={names} dropcap />
+      </div>
+      <div className="center-page" style={{ flex: "none", padding: "12px 24px 26px", borderTop: "1px solid var(--rule)" }}>
+        <button className="btn btn-accent" style={{ width: "100%" }} onClick={onDone}>Go on</button>
+      </div>
     </motion.div>
   );
 }

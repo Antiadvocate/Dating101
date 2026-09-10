@@ -26,10 +26,11 @@ import type { ActionMode, SaveState } from "@weft/engine/types";
 import { DEFAULT_MODELS } from "@weft/engine/types";
 import { activeArc, currentBeat, isDating, type DatingLayer, type Door, type Keepsake } from "./types";
 import { enterBeat, gateCheck, heatOf, openGate, resolveTerminal, takeDoor, terminalOf } from "./arc";
-import { beatDirective, doorsFor, endingFor, judgeBeat, openingFor, voiceCheck } from "./gate";
+import { beatDirective, consequenceFor, doorsFor, endingFor, judgeBeat, openingFor, voiceCheck } from "./gate";
 import { voiceCorrection } from "./tics";
 import { adultAge, emptyAppetites, type Appetites } from "./appetite";
 import { runCasting, beginRoute, type CastingInput } from "./casting";
+import { runTurn } from "@weft/engine/turn";
 
 const uid = (p: string) => `${p}_${Math.random().toString(36).slice(2, 10)}`;
 
@@ -144,6 +145,15 @@ export async function openBeat(id: string): Promise<ClientSave> {
     if (written) {
       beat.opening = written.opening;
       if (written.title_line) beat.when = written.title_line;
+    } else {
+      /* THE CALL FAILED, AND A CHAPTER WITH NO OPENING IS A BLANK SCREEN THE
+         PLAYER HAS TO GUESS AT. This is not good writing and is not meant to
+         be — it says where you are, when it is, and who is there, which is the
+         minimum a player needs in order to type something. The console can
+         rewrite it in one tap once the model is answering again. */
+      const her = s.characters[arc.char_id];
+      const place = beat.where || s.world.places[s.world.player_location]?.name || "where you were";
+      beat.opening = `${beat.when.charAt(0).toUpperCase()}${beat.when.slice(1)}. You are at ${place}${her ? `, and ${her.name} is here` : ""}. (The opening for this chapter could not be written — the model call failed. Rewrite it from the console, or just start.)`;
     }
   }
 
@@ -344,6 +354,10 @@ function skipMinutes(when: string): number {
 
 export interface DoorResult {
   save: ClientSave;
+  /** What happened when the player did the thing they chose. Belongs to the
+   *  chapter that just closed, so the scene shows it before the next chapter's
+   *  title card rather than filing it where nobody will scroll back to it. */
+  played?: string;
   /** Set when the route ended here. */
   ending?: { kind: "win" | "loss" | "sour"; title: string; prose: string };
 }
@@ -355,9 +369,36 @@ export async function walkThrough(id: string, doorId: string, onPhase: (p: strin
   const door = s.dating.gate?.doors.find((d) => d.id === doorId);
   if (!arc || !door) throw new Error("that door is not open");
 
-  // Record the choice as a turn of its own, so the journal reads continuously
-  // and the narrator's replayed history contains the decision rather than a
-  // hole where one was made.
+  /* PLAY IT FIRST. This block is what the comment here used to promise and
+     never did. Walking through a door skipped straight to the time jump, so
+     whatever the player chose to do was never written, never read, and never
+     reached the ledger — the spine's "you chose: X" was the only evidence a
+     chapter had ended at all.
+
+     So the choice gets written and then pushed through Weft's own turn loop
+     with proseOverride, which runs the bookkeeper, moves the edges, writes the
+     memories and lands it in history as an ordinary turn. It happens BEFORE the
+     cursor moves, which also means the beat is graded on a ledger that includes
+     what the choice did to it. One narrator call and one bookkeeper call, and
+     it buys the difference between a choice and a menu selection. */
+  onPhase("playing that out");
+  const prose = await consequenceFor(s, arc, door, bigModel(s));
+  if (prose) {
+    try {
+      await runTurn(s, door.label, { onPhase: () => {}, onDelta: () => {}, onMeta: () => {} },
+        "do", { proseOverride: prose });
+    } catch {
+      // Bookkeeping failed. The prose is still the truth of what happened, so
+      // put it on the page by hand rather than losing the beat entirely.
+      s.history.push({
+        turn: ++s.world.current_turn, kind: "turn", player_action: door.label,
+        action_mode: "do", narrator_prose: prose, summary: "", offscreen: [],
+        time_label: s.world.current_time,
+      });
+    }
+    await putSave(s);
+  }
+
   const heat = heatOf(s, arc.char_id).value;
   const next = takeDoor(s, door);
 
@@ -382,7 +423,7 @@ export async function walkThrough(id: string, doorId: string, onPhase: (p: strin
   await putSave(s);
 
   onPhase("setting the next scene");
-  return { save: await openBeat(id) };
+  return { save: await openBeat(id), played: prose || undefined };
 }
 
 /* ── PICTURES ────────────────────────────────────────────────────────────────*/
