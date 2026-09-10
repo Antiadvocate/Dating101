@@ -132,7 +132,8 @@ export interface Appetites {
   /** The one thing they want and will not ask for. Hidden from the dossier
    *  until the story surfaces it. */
   unsaid?: string;
-  /** Hard lines. Refusing is a scene, not a failure. */
+  /** Hard lines. When one gets pushed at, she refuses, and that refusal plays
+   *  as a scene rather than as the game blocking you. */
   limits: string[];
   /** How they are, in their own idiom — one or two sentences. Not a list of
    *  acts; the manner. This is what actually differentiates two people who

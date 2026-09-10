@@ -126,7 +126,7 @@ export async function openingFor(s: SaveState, model: string): Promise<{ opening
     `CHAPTER ${beat.idx + 1} OF ${arc.beats.length}: ${beat.title}`,
     `WHAT IT IS FOR (never state this on the page): ${beat.job}`,
     beat.heat === "sex" ? `THIS CHAPTER IS A SEX SCENE. Open it underway or a moment from it.${beat.about ? ` It is built around: ${beat.about}.` : ""}` : "",
-    beat.heat === "builds" ? `This chapter ends in bed. Open it close to that, not at the beginning of the evening.` : "",
+    beat.heat === "builds" ? `This chapter ends in bed, so open it somewhere close to that rather than at the beginning of the evening.` : "",
     `WHERE: ${beat.where}`,
     `WHEN: ${beat.when}`,
     ``,
@@ -252,7 +252,7 @@ Each door carries a "read": one sentence, under twenty words, saying what taking
 
 The three have to differ in kind rather than in degree, since three intensities of the same move is really only one door. Across the three, at least one should be a real risk with a plausible way to go badly, and at least one should be the quiet, unglamorous option that a sensible adult would actually take. Never make one door obviously correct.
 
-Use what actually happened in the scene. A door that could have been written before the scene started is the wrong door. If somebody mentioned their sister, a door can be about the sister.
+Use what actually happened in the scene. If a door could have been written before the scene started then it isn't drawing on anything that happened in it, so if somebody mentioned their sister, one of the doors can be about the sister.
 
 You may write a door that is rude, cowardly, blunt, or sexual, if the scene has earned it. Do not write one that is out of character for the player as they have been playing.
 
@@ -374,7 +374,7 @@ Two or three short paragraphs, present tense, with the player as "you" and every
 
 Stop while it is still unfinished. This is the end of a chapter and not the end of the story, so don't resolve anything, don't have anybody explain how they feel about what just happened, and don't jump forward in time. If the choice was a bad idea, let it go badly and leave it gone badly.
 
-Don't summarise. Don't write a closing line. The last sentence should be a thing somebody does or says, not a reflection on it.
+Don't summarise, and don't write a closing line. End on something somebody does or says rather than on a reflection about it.
 
 ${NO_TROPES}
 
@@ -502,21 +502,21 @@ export function beatDirective(s: SaveState, arc: Arc, beat: Beat, layer: DatingL
     `THE SCENE: ${beat.opening ?? beat.where}`,
     ``,
     beat.heat === "sex" || beat.heat === "builds"
-      ? `Write ${other} as somebody with their own appetite in this, not as somebody being persuaded. They have wanted this, they have thought about it, and they are capable of saying so and of starting it. They can still be awkward, or particular, or find something funny — what they cannot be is passive.`
+      ? `Write ${other} as somebody who wants this too. She has thought about it, she can say so out loud, and she is able to start it herself. She can still be awkward about it, or particular, or find something funny, but she should never be sitting there waiting to be talked into anything.`
       : `Write ${other} as a person with their own evening, their own irritations, and somewhere else they could be. They're allowed to be bored, distracted, unimpressed, or busy. They don't exist to answer the player, and they don't explain themselves at length unless somebody asks.`,
     ...(beat.heat === "sex" ? [
       ``,
       arc.beats.some((b) => b.heat === "sex" && b.idx < beat.idx && b.status === "done")
-        ? `They have slept together before. Write two people who know what the other one does, not a first time — the awkwardness of a first time is gone and something easier and more specific has replaced it.`
-        : `THIS IS THE FIRST TIME. Neither of them has done this with the other before, and that shows in the particulars — not in hesitation, since they both want it, but in not yet knowing what the other one likes or how they are afterwards.`,
-      `THIS CHAPTER IS A SEX SCENE. That is what it is for, and it happens inside this chapter rather than being approached across it. Do not spend turns on preamble — by the second turn they are already going, and if the player's first message is ordinary conversation, ${other} is the one who moves it.`,
-      beat.about ? `It is built around this: ${beat.about}. That is the subject of the scene, not a detail in it.` : "",
-      `${other} WANTS THIS AND ACTS LIKE IT. She initiates, she asks for things, she puts herself where she wants to be. The player should not have to be the one who starts it, or the one who keeps it going, or the one who names what is happening. A chapter where she waits to be acted upon has failed.`,
-      `Her limits still hold absolutely. Everything that is not a limit is on the table.`,
+        ? `They have slept together before, so write two people who already know what the other one does. The awkwardness of a first time has gone and what has replaced it is easier and more specific.`
+        : `THIS IS THE FIRST TIME between these two. Neither of them knows yet what the other one likes, or how the other one is afterwards, and that should show in the particulars. It shouldn't show as hesitation, because they both want it.`,
+      `THIS CHAPTER IS A SEX SCENE, and it happens inside the chapter rather than being approached across it. Don't spend turns on preamble. By the second turn they should already be going, and if the player opens with ordinary conversation then ${other} is the one who moves things along.`,
+      beat.about ? `It is built around ${beat.about}, and the scene should actually be about that rather than mentioning it somewhere in passing.` : "",
+      `${other} wants this and behaves that way. She starts things, she asks for what she wants, and she puts herself where she wants to be. The player shouldn't have to be the one who begins it, or the one who keeps it going, or the one who says out loud what is happening.`,
+      `Her limits still hold absolutely. Anything that isn't one of her limits is available to the scene.`,
       ``,
     ].filter(Boolean) : beat.heat === "builds" ? [
       ``,
-      `THIS CHAPTER ENDS IN BED, and closes inside it rather than at the door. ${other} wants it and is not being coy about it; she can be the one who closes the distance.`,
+      `THIS CHAPTER ENDS IN BED, and it closes inside that rather than at the door. ${other} wants it and isn't being coy, so she can be the one who closes the distance.`,
       beat.about ? `What it turns on: ${beat.about}.` : "",
       ``,
     ].filter(Boolean) : []),

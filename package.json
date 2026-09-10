@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "lint": "tsc --noEmit",
-    "screens": "node tools/screens.mjs"
+    "screens": "node tools/screens.mjs",
+    "voice": "node tools/maxims.mjs --prompts"
   },
   "dependencies": {
     "lucide-react": "^0.546.0",
