@@ -31,39 +31,126 @@ const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const subjectPronoun = (p?: string) => (p ?? "").toLowerCase().split("/")[0].trim() || null;
 const firstName = (n: string) => n.split(/\s+/)[0];
 
-/**
- * Who said it.
- *
- * Three passes, in falling order of confidence, and it gives up rather than
- * guess. A missing nameplate on a line of dialogue looks deliberate — plenty of
- * novels never attribute — while a WRONG one is the most damaging thing this
- * component could do, so the bar for printing a name is high.
- *
- *   1. A name or a first name inside the attribution tag right after the quote.
- *      "Anchovies," Vesna says.
- *   2. A subject pronoun in that tag which exactly one person in the scene
- *      uses. "Anchovies," she says — and she is the only she/her present. This
- *      is the one that matters, because narrators overwhelmingly write the
- *      pronoun rather than the name.
- *   3. Exactly one known name anywhere in the paragraph.
- */
-function attribute(para: string, speakers: Speaker[]): string | null {
-  const after = para.replace(/^[^"\u201c]*["\u201c][^"\u201d]*["\u201d]/, "");
-  const tag = after.slice(0, 64);
+/** One run of a paragraph: either speech inside quotation marks, or the
+ *  narration around it. */
+export interface Segment { kind: "said" | "beat"; text: string }
 
-  for (const s of speakers) {
+/**
+ * Cut a paragraph into speech and narration.
+ *
+ * This used to test the FIRST CHARACTER of a paragraph and send the whole thing
+ * one way or the other, which got it wrong in both directions at once. A
+ * paragraph opening with narration rendered its dialogue as narration, so the
+ * quotes never got their own treatment; a paragraph opening with a quote
+ * swallowed the trailing "she says it like she's letting you in on something"
+ * into the dialogue block, so narration got set as speech. Narrators write
+ * mixed paragraphs constantly, so both were happening on nearly every turn.
+ *
+ * Only double quotes are tracked, straight or curly. Apostrophes are left
+ * alone, which is why "she's" and "I'm" survive.
+ */
+export function splitSpeech(para: string): Segment[] {
+  const out: Segment[] = [];
+  let buf = "";
+  let open = false;
+  const flush = (kind: Segment["kind"]) => {
+    const text = buf.trim();
+    if (text) out.push({ kind, text });
+    buf = "";
+  };
+  for (const ch of para) {
+    if (!open && (ch === '"' || ch === "\u201c")) {
+      flush("beat");
+      open = true;
+      buf += ch;
+      continue;
+    }
+    if (open && (ch === '"' || ch === "\u201d")) {
+      buf += ch;
+      flush("said");
+      open = false;
+      continue;
+    }
+    buf += ch;
+  }
+  // An unclosed quote runs to the end of the paragraph, which happens when a
+  // speech continues past a line break.
+  flush(open ? "said" : "beat");
+  return coalesce(out);
+}
+
+/**
+ * Put embedded quotes back where they came from.
+ *
+ * Not every pair of quotation marks is somebody speaking. "He said "hello" and
+ * then the door shut" is one sentence, and lifting the middle of it into a
+ * dialogue block cuts a sentence in half on the page for no reason.
+ *
+ * The tell is whether the run before it finished a sentence. Narration that
+ * ends on a full stop is followed by a new line of speech; narration that
+ * trails off mid-clause is still in the same sentence as whatever is quoted
+ * next. Combined with a length test, since a long quotation after "she said" is
+ * dialogue whatever the punctuation is doing.
+ */
+function coalesce(segs: Segment[]): Segment[] {
+  // Each run was trimmed on the way out of the splitter, so rejoining needs a
+  // space — except where the next run opens on punctuation, which is what a
+  // sentence looks like after a quoted word is folded back into it.
+  const join = (a: string, b: string) => (/^[,.;:!?)\]]/.test(b) ? `${a}${b}` : `${a} ${b}`);
+  const out: Segment[] = [];
+  for (const seg of segs) {
+    const prev = out[out.length - 1];
+    const embedded =
+      seg.kind === "said" &&
+      seg.text.length < 26 &&
+      prev?.kind === "beat" &&
+      !/[.!?:\u2014-]["\u201d)]?$/.test(prev.text);
+    if (embedded) {
+      prev.text = join(prev.text, seg.text);
+      continue;
+    }
+    if (prev && prev.kind === seg.kind) {
+      prev.text = join(prev.text, seg.text);
+      continue;
+    }
+    out.push({ ...seg });
+  }
+  return out;
+}
+
+/**
+ * Who said one particular line.
+ *
+ * Checked against the narration nearest the line rather than the paragraph as a
+ * whole, because a paragraph often holds both people — the player asks
+ * something, she answers, and attributing both to her would be worse than
+ * attributing neither.
+ *
+ * Three passes, falling in confidence, and it gives up rather than guess. A
+ * line with no nameplate looks deliberate, since plenty of novels never
+ * attribute. A line with the WRONG name on it is the most damaging thing this
+ * component could do.
+ */
+function attributeAt(segments: Segment[], idx: number, names: Speaker[]): string | null {
+  const after = segments[idx + 1]?.kind === "beat" ? segments[idx + 1].text : "";
+  const before = idx > 0 && segments[idx - 1].kind === "beat" ? segments[idx - 1].text : "";
+  const tag = `${after.slice(0, 70)} ${before.slice(-70)}`;
+
+  for (const s of names) {
     const forms = [s.name, firstName(s.name)];
     if (forms.some((f) => new RegExp(`\\b${esc(f)}\\b`).test(tag))) return firstName(s.name);
   }
 
+  // "she says" is what narrators actually write, so a subject pronoun that only
+  // one person present could own is the pass that carries most of the weight.
   const pr = tag.toLowerCase().match(/\b(she|he|they)\b/);
   if (pr) {
-    const owners = speakers.filter((s) => subjectPronoun(s.pronouns) === pr[1]);
+    const owners = names.filter((s) => subjectPronoun(s.pronouns) === pr[1]);
     if (owners.length === 1) return firstName(owners[0].name);
   }
 
-  const inPara = speakers.filter((s) =>
-    new RegExp(`\\b${esc(firstName(s.name))}\\b`).test(para));
+  const whole = segments.map((s) => s.text).join(" ");
+  const inPara = names.filter((s) => new RegExp(`\\b${esc(firstName(s.name))}\\b`).test(whole));
   return inPara.length === 1 ? firstName(inPara[0].name) : null;
 }
 
@@ -88,32 +175,57 @@ export function Prose({
   className?: string;
 }) {
   const paras = React.useMemo(
-    () => text.split(/\n{1,}/).map((p) => p.trim()).filter(Boolean),
+    () => text.split(/\n{1,}/).map((s) => s.trim()).filter(Boolean).map(splitSpeech),
     [text],
   );
   let firstNarration = true;
 
   return (
     <div className={`prose ${className}`}>
-      {paras.map((p, i) => {
-        const last = i === paras.length - 1;
-        if (OPEN_Q.test(p)) {
-          const who = attribute(p, names);
+      {paras.map((segments, pi) => {
+        const lastPara = pi === paras.length - 1;
+
+        // A paragraph of pure narration stays one paragraph, which is most of
+        // them and the reason this does not turn every page into a script.
+        if (segments.length === 1 && segments[0].kind === "beat") {
+          const cap = dropcap && firstNarration && segments[0].text.length > 60;
+          if (cap) firstNarration = false;
           return (
-            <p className="said" key={i}>
-              {who && <span className="who">{who}</span>}
-              {inline(p, String(i))}
-              {streaming && last && <span className="caret" />}
+            <p className={cap ? "dropcap" : undefined} key={pi}>
+              {inline(segments[0].text, `${pi}`)}
+              {streaming && lastPara && <span className="caret" />}
             </p>
           );
         }
-        const cap = dropcap && firstNarration && p.length > 60;
-        if (cap) firstNarration = false;
+
+        let lastSpeaker: string | null = null;
         return (
-          <p className={cap ? "dropcap" : undefined} key={i}>
-            {inline(p, String(i))}
-            {streaming && last && <span className="caret" />}
-          </p>
+          <div className="mixed" key={pi}>
+            {segments.map((seg, si) => {
+              const lastSeg = lastPara && si === segments.length - 1;
+              if (seg.kind === "beat") {
+                return (
+                  <p className="beat" key={si}>
+                    {inline(seg.text, `${pi}-${si}`)}
+                    {streaming && lastSeg && <span className="caret" />}
+                  </p>
+                );
+              }
+              const who = attributeAt(segments, si, names);
+              // The nameplate goes on the first line of a run and is dropped
+              // while the same person keeps talking, so a paragraph where she
+              // says four things is not stamped with her name four times.
+              const show = who && who !== lastSpeaker ? who : null;
+              lastSpeaker = who ?? lastSpeaker;
+              return (
+                <p className="said" key={si}>
+                  {show && <span className="who">{show}</span>}
+                  {inline(seg.text, `${pi}-${si}`)}
+                  {streaming && lastSeg && <span className="caret" />}
+                </p>
+              );
+            })}
+          </div>
         );
       })}
       {streaming && !paras.length && <span className="caret" />}

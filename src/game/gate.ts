@@ -109,17 +109,26 @@ export async function openingFor(s: SaveState, model: string): Promise<{ opening
     bounds((s as { dating?: DatingLayer }).dating),
   ].filter(Boolean).join("\n");
 
-  try {
-    const out = await complete(buildMessages(OPENING_SYSTEM, "SCENE", volatile, model), model, model, true, 700);
-    const j = safeJson<{ opening?: string; time?: string; title_line?: string }>(out.text, {});
-    const opening = String(j.opening ?? "").trim();
-    if (!opening) return null;
-    return {
-      opening,
-      time: String(j.time ?? "").trim(),
-      title_line: String(j.title_line ?? "").trim(),
-    };
-  } catch { return null; }
+  /* Three attempts across two models, the same as the doors get. This had one
+     attempt and no fallback, and a single refused or malformed response put the
+     plain "the model call failed" placeholder into a brand new chapter one —
+     which is the first thing a player reads in a new game. The opening is one
+     small call and it is worth buying twice. */
+  for (const m of [model, model, DEFAULT_MODELS.fallback_model]) {
+    try {
+      const out = await complete(buildMessages(OPENING_SYSTEM, "SCENE", volatile, m), m, m, true, 900);
+      const j = safeJson<{ opening?: string; time?: string; title_line?: string }>(out.text, {});
+      const opening = String(j.opening ?? "").trim();
+      if (opening) {
+        return {
+          opening,
+          time: String(j.time ?? "").trim(),
+          title_line: String(j.title_line ?? "").trim(),
+        };
+      }
+    } catch { /* try the next one */ }
+  }
+  return null;
 }
 
 /* ── 2. THE JUDGE ────────────────────────────────────────────────────────────*/

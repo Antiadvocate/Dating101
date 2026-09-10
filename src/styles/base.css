@@ -77,6 +77,10 @@
   --card:         #1e1a16;
   --card-shadow:  0 1px 2px rgba(0,0,0,.5), 0 10px 30px -14px rgba(0,0,0,.8);
   --photo-mat:    #2a241e;
+  --accent:       #e06e78;
+  --accent-deep:  #b03a48;
+  --accent-line:  rgba(224,110,120,.55);
+  --accent-soft:  rgba(224,110,120,.13);
   color-scheme: dark;
 }
 
@@ -87,10 +91,17 @@
 [data-route="ochre"]  { --accent:#a3762a; --accent-deep:#71501a; --accent-soft:rgba(163,118,42,.11); --accent-line:rgba(163,118,42,.34); }
 [data-route="verd"]   { --accent:#2b6f66; --accent-deep:#1b4a44; --accent-soft:rgba(43,111,102,.11); --accent-line:rgba(43,111,102,.34); }
 [data-route="plum"]   { --accent:#6a4489; --accent-deep:#472c5c; --accent-soft:rgba(106,68,137,.11); --accent-line:rgba(106,68,137,.34); }
-[data-mode="night"][data-route="madder"] { --accent:#e06e78; --accent-deep:#b03a48; }
-[data-mode="night"][data-route="ochre"]  { --accent:#d9a24e; --accent-deep:#a3762a; }
-[data-mode="night"][data-route="verd"]   { --accent:#5fb3a6; --accent-deep:#2b6f66; }
-[data-mode="night"][data-route="plum"]   { --accent:#a781c9; --accent-deep:#6a4489; }
+/* NIGHT LIFTS THE ACCENT AND HAS TO LIFT WHAT IS DERIVED FROM IT.
+   These four rules used to redefine --accent and --accent-deep and stop there,
+   leaving --accent-line and --accent-soft holding the DAY values: a dark hue at
+   a third opacity, which is legible against paper and invisible against ink. So
+   every rule drawn in the accent — the bar down the side of a line of dialogue,
+   the door bearings, the selected row — was being drawn on the dark theme and
+   could not be seen. Anything derived from the accent is redefined here. */
+[data-mode="night"][data-route="madder"] { --accent:#e06e78; --accent-deep:#b03a48; --accent-line:rgba(224,110,120,.55); --accent-soft:rgba(224,110,120,.13); }
+[data-mode="night"][data-route="ochre"]  { --accent:#d9a24e; --accent-deep:#a3762a; --accent-line:rgba(217,162,78,.55);  --accent-soft:rgba(217,162,78,.13); }
+[data-mode="night"][data-route="verd"]   { --accent:#5fb3a6; --accent-deep:#2b6f66; --accent-line:rgba(95,179,166,.55);  --accent-soft:rgba(95,179,166,.13); }
+[data-mode="night"][data-route="plum"]   { --accent:#a781c9; --accent-deep:#6a4489; --accent-line:rgba(167,129,201,.55); --accent-soft:rgba(167,129,201,.13); }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -168,7 +179,13 @@ body::after {
    anybody having to read a word. This is the hybrid: narration reads like a
    novel, dialogue reads like a play. */
 .said {
-  margin: 1.15em 0 1.15em -0.9em;
+  /* The rule sits ON the margin and the speech is indented from it, rather than
+     the block being pulled left out of the column. The pull-out version drew
+     its border outside the scrolling container, and setting overflow-y on an
+     element computes overflow-x to auto as well, so the rule was being clipped
+     away on every line of dialogue in the app. Indenting inward needs no room
+     outside the box and cannot be cut off. */
+  margin: 1.15em 0;
   padding-left: .9em;
   border-left: 2px solid var(--accent-line);
   font-size: 18.5px;
@@ -340,3 +357,15 @@ button:disabled { cursor: default; opacity: .4; }
    this the whole thing pins to the left edge of a wide screen and the right
    third is dead paper. */
 .center-page { max-width: 960px; margin-left: auto; margin-right: auto; width: 100%; }
+
+/* ── A PARAGRAPH THAT HOLDS BOTH ─────────────────────────────────────────────
+   Narrators mix speech and narration inside one paragraph constantly, and the
+   page has to show both without pretending the paragraph was two. The segments
+   are set tighter than paragraph-to-paragraph spacing so a split paragraph
+   still reads as a single unit, with the quotes lifted into the dialogue
+   treatment and the narration between them sitting as ordinary prose. */
+.prose .mixed { margin: 0 0 1.05em; }
+.prose .mixed .beat { margin: 0 0 .5em; }
+.prose .mixed .said { margin: .5em 0 .6em; }
+.prose .mixed > :last-child { margin-bottom: 0; }
+.prose .mixed + .mixed { margin-top: 0; }
