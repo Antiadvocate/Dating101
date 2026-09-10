@@ -196,6 +196,14 @@ export async function openBeat(id: string): Promise<ClientSave> {
     return weft.save(id);
   }
 
+  /* An authored chapter sets the ladder rather than creeping toward it. The
+     ladder exists to stop a model teleporting past what has happened; a chapter
+     the spine wrote as a sex scene is not a model teleporting, and making it
+     wait three more chapters for the rung to catch up is how a game asked for
+     as erotica turns into a novel with a scene at the end. */
+  if (beat.rung_target != null) {
+    arc.rung = Math.max(arc.rung ?? 0, beat.rung_target);
+  }
   if (beat.opening && !s.dating.opening_error) delete s.dating.opening_error;
   s.dating.needs_opening = false;
   await syncDirective(s);

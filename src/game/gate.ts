@@ -106,6 +106,8 @@ SAY WHY THE PLAYER IS THERE. They did not appear out of nowhere and the reader h
 
 THE CHAPTER TITLE MAY ASSUME THINGS THAT HAVE NOT HAPPENED. It was written before the story ran, so it can refer to a car nobody has been in or a habit nobody has formed yet. Where the title and the state disagree, the state wins — write the chapter the state supports and ignore whatever the title promised.
 
+IF YOU ARE TOLD THIS CHAPTER IS A SEX SCENE, open it already underway or a moment from it — they are somewhere private, the reason they are there is not in question, and one of them has already started. Do not open on arrival, on small talk, or on anybody deciding whether. The chapter has a handful of turns and none of them should be spent getting into the room.
+
 If the two of them are alone, keep them alone. Do not introduce a friend, a colleague, a flatmate or a passerby who was not already in the scene; a third person in the room at the top of a chapter takes it over. Say where they are, what time it is, what is already happening, and what the other person is doing when the player arrives. Leave the situation in motion at the end, and don't finish on a question or on somebody asking the player one.
 
 ${NO_TROPES}
@@ -123,6 +125,8 @@ export async function openingFor(s: SaveState, model: string): Promise<{ opening
   const volatile = [
     `CHAPTER ${beat.idx + 1} OF ${arc.beats.length}: ${beat.title}`,
     `WHAT IT IS FOR (never state this on the page): ${beat.job}`,
+    beat.heat === "sex" ? `THIS CHAPTER IS A SEX SCENE. Open it underway or a moment from it.${beat.about ? ` It is built around: ${beat.about}.` : ""}` : "",
+    beat.heat === "builds" ? `This chapter ends in bed. Open it close to that, not at the beginning of the evening.` : "",
     `WHERE: ${beat.where}`,
     `WHEN: ${beat.when}`,
     ``,
@@ -497,7 +501,25 @@ export function beatDirective(s: SaveState, arc: Arc, beat: Beat, layer: DatingL
     ``,
     `THE SCENE: ${beat.opening ?? beat.where}`,
     ``,
-    `Write ${other} as a person with their own evening, their own irritations, and somewhere else they could be. They're allowed to be bored, distracted, unimpressed, or busy. They don't exist to answer the player, and they don't explain themselves at length unless somebody asks.`,
+    beat.heat === "sex" || beat.heat === "builds"
+      ? `Write ${other} as somebody with their own appetite in this, not as somebody being persuaded. They have wanted this, they have thought about it, and they are capable of saying so and of starting it. They can still be awkward, or particular, or find something funny — what they cannot be is passive.`
+      : `Write ${other} as a person with their own evening, their own irritations, and somewhere else they could be. They're allowed to be bored, distracted, unimpressed, or busy. They don't exist to answer the player, and they don't explain themselves at length unless somebody asks.`,
+    ...(beat.heat === "sex" ? [
+      ``,
+      arc.beats.some((b) => b.heat === "sex" && b.idx < beat.idx && b.status === "done")
+        ? `They have slept together before. Write two people who know what the other one does, not a first time — the awkwardness of a first time is gone and something easier and more specific has replaced it.`
+        : `THIS IS THE FIRST TIME. Neither of them has done this with the other before, and that shows in the particulars — not in hesitation, since they both want it, but in not yet knowing what the other one likes or how they are afterwards.`,
+      `THIS CHAPTER IS A SEX SCENE. That is what it is for, and it happens inside this chapter rather than being approached across it. Do not spend turns on preamble — by the second turn they are already going, and if the player's first message is ordinary conversation, ${other} is the one who moves it.`,
+      beat.about ? `It is built around this: ${beat.about}. That is the subject of the scene, not a detail in it.` : "",
+      `${other} WANTS THIS AND ACTS LIKE IT. She initiates, she asks for things, she puts herself where she wants to be. The player should not have to be the one who starts it, or the one who keeps it going, or the one who names what is happening. A chapter where she waits to be acted upon has failed.`,
+      `Her limits still hold absolutely. Everything that is not a limit is on the table.`,
+      ``,
+    ].filter(Boolean) : beat.heat === "builds" ? [
+      ``,
+      `THIS CHAPTER ENDS IN BED, and closes inside it rather than at the door. ${other} wants it and is not being coy about it; she can be the one who closes the distance.`,
+      beat.about ? `What it turns on: ${beat.about}.` : "",
+      ``,
+    ].filter(Boolean) : []),
     `This scene is between the player and ${other}. Don't bring in a friend, a flatmate, a colleague or a passerby who isn't already here — a third person in the room takes the scene over and it stops being about the two of them. Anybody who is genuinely present can be acknowledged, but they should have somewhere else to be and should go there.`,
     `Something should change every turn, even slightly — somebody moves, or arrives, or picks something up, or won't talk about something. If two people have been sitting in the same positions talking for three turns, the scene has stopped.`,
     ``,

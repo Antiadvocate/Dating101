@@ -139,7 +139,7 @@ THE THREE ENDINGS, written specifically for THIS person — a guarded person's b
 Every route you are given must come back COMPLETELY DIFFERENT from the others: different beat kinds, different pacing, different endings. If two routes could swap a beat without anyone noticing, rewrite one.
 
 SHAPE:
-{"routes":[{"name":"exact name as given","beats":[{"title":"","job":"","where":"","when":"","floor":4,"ceiling":11}],"terminals":[{"kind":"win","title":"","description":""},{"kind":"loss","title":"","description":""},{"kind":"sour","title":"","description":""}],"appetites":{"into":[],"curious":[],"unsaid":"","limits":[],"register":""}}]}`;
+{"routes":[{"name":"exact name as given","beats":[{"title":"","job":"","where":"","when":"","floor":4,"ceiling":11,"heat":"none|builds|sex","rung_target":0,"about":""}],"terminals":[{"kind":"win","title":"","description":""},{"kind":"loss","title":"","description":""},{"kind":"sour","title":"","description":""}],"appetites":{"into":[],"curious":[],"unsaid":"","limits":[],"register":""}}]}`;
 
 interface RawAppetites {
   into?: unknown; curious?: unknown; unsaid?: unknown; limits?: unknown; register?: unknown;
@@ -148,7 +148,8 @@ interface RawAppetites {
 interface RawRoute {
   name?: string;
   appetites?: RawAppetites;
-  beats?: { title?: string; job?: string; where?: string; when?: string; floor?: number; ceiling?: number }[];
+  beats?: { title?: string; job?: string; where?: string; when?: string; floor?: number; ceiling?: number;
+            heat?: string; rung_target?: number; about?: string }[];
   terminals?: { kind?: string; title?: string; description?: string }[];
 }
 
@@ -186,7 +187,11 @@ function normalizeBeats(raw: RawRoute["beats"], want: number, places: string[]):
     const job = String(b?.job ?? "").trim();
     if (!title || !job) continue;
     const ceiling = clampInt(b?.ceiling, 5, 18, 11);
+    const heat = ["none", "builds", "sex"].includes(String(b?.heat)) ? b!.heat as Beat["heat"] : "none";
     out.push({
+      heat,
+      rung_target: clampInt(b?.rung_target, 0, 6, heat === "sex" ? 5 : heat === "builds" ? 3 : 0),
+      about: String(b?.about ?? "").trim() || undefined,
       id: uid("beat"),
       idx: out.length,
       title, job,

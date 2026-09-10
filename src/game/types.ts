@@ -63,6 +63,30 @@ export interface Beat {
   /** A line of physical detail from the scene, printed under the chapter title.
    *  Decoration, read by nothing. */
   caption?: string;
+  /** WHAT THIS CHAPTER PHYSICALLY IS.
+   *
+   *  Added because the game was built as a romance that ends in sex and asked
+   *  for as a game whose content is sex. Those want opposite spines. Under the
+   *  first, a chapter is a situation and the body is where the arc eventually
+   *  arrives; under the second, most chapters ARE the scene and the situation
+   *  is the excuse. One save came back with six conversations and two physical
+   *  chapters, the first at six of eight, on a register set to explicit.
+   *
+   *  · "none"   — no sex in this chapter. Meeting somebody, or a chapter about
+   *               a third party, or the morning after.
+   *  · "builds" — it gets there by the end and closes inside it.
+   *  · "sex"    — the chapter is the scene. It opens somewhere private with
+   *               both of them already going, and does not spend six turns
+   *               getting to the point. */
+  heat?: "none" | "builds" | "sex";
+  /** The rung this chapter is written AT. The ladder is set to this on entry
+   *  rather than crept toward one step at a time — the ladder exists to stop a
+   *  model teleporting past what has happened, and an authored chapter is not
+   *  a model teleporting. */
+  rung_target?: number;
+  /** The appetite this chapter is built around, taken from the palette or from
+   *  the person's own card. Handed to the narrator as the subject of the scene. */
+  about?: string;
   /** Turns that must pass inside the beat before the gate may open. Stops a
    *  two-line scene from resolving the whole thing. */
   floor: number;
