@@ -3,7 +3,7 @@ import { activeArc, currentBeat, type Save } from "../game/types";
 import { RUNGS, rungLabel } from "../game/appetite";
 import { heatOf } from "../game/arc";
 import {
-  editEdge, forceEnding, forceGate, jumpToBeat, load, reopenRoute, revealAppetites,
+  editEdge, forceEnding, forceGate, jumpToBeat, load, rebuildSpine, reopenRoute, revealAppetites,
   rereadVoice, rewriteOpening, rollback, setGodMode, setRung, setTime, weft,
 } from "../game/api";
 import { Mark } from "../ui/kit";
@@ -129,6 +129,17 @@ export default function Debug({ save, setSave, onEdit, onPlay }: {
             <Row note="Throw away this chapter's opening and write another. One small call.">
               <button className="btn" disabled={!!busy} onClick={() => run("rewrite opening", () => rewriteOpening(save.id))}>
                 {busy === "rewrite opening" ? "…" : "Rewrite the opening"}
+              </button>
+            </Row>
+
+            <Row note="Rewrites every chapter from this one onward, against how things actually stand between you now rather than how it was guessed before turn one. Chapters you have played keep their record. This is the one to use if the spine was written before a setting changed, or if it came back tamer than the register asked for.">
+              <button className="btn btn-ink" disabled={!!busy}
+                onClick={() => run("rebuild the spine", async () => {
+                  const r = await rebuildSpine(save.id);
+                  if (!r.written) throw new Error("the spine call came back unusable — nothing changed");
+                  return r.save;
+                })}>
+                {busy === "rebuild the spine" ? "writing…" : "Rewrite the rest of the arc"}
               </button>
             </Row>
 

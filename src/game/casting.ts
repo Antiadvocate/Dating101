@@ -24,7 +24,7 @@ import { ROUTE_ACCENTS, type AnySave, type Arc, type Beat, type DatingLayer, typ
 import { enterBeat } from "./arc";
 import { fb } from "./gate";
 import { seedAttraction } from "@weft/engine/desire";
-import { appetiteBrief, adultAge, emptyAppetites, EXPLICITNESS, HARD_FLOOR, type Appetites, type Explicitness } from "./appetite";
+import { appetiteBrief, adultAge, emptyAppetites, EXPLICITNESS, HARD_FLOOR, rungLabel, type Appetites, type Explicitness } from "./appetite";
 
 export interface Brief {
   /** What the player typed. The whole description, verbatim. */
@@ -479,6 +479,93 @@ function fallbackBeats(who: string, want: number, places: string[]): Beat[] {
     ceiling: i >= jobs.length - 2 ? 15 : 10,
     status: "locked",
   }));
+}
+
+/**
+ * REWRITE THE CHAPTERS THAT HAVE NOT BEEN PLAYED.
+ *
+ * The spine is written once, at casting, so everything learned since about what
+ * an explicit spine should look like only ever applied to routes cast
+ * afterwards. Somebody twenty turns into a save could get it only by throwing
+ * the save away, which is not a reasonable thing to ask of anybody who has been
+ * playing for an hour.
+ *
+ * Played chapters keep their record — what happened, what was chosen, how it
+ * went. Everything from the current chapter onward is written again against the
+ * relationship as it actually stands, which is the other reason to do it: a
+ * spine written cold does not know they have already slept together.
+ */
+export async function respine(
+  save: SaveState & { dating: DatingLayer },
+  charId: string,
+  model: string,
+): Promise<number> {
+  const arc = save.dating.routes[charId];
+  const char = save.characters[charId];
+  if (!arc || !char) return 0;
+
+  const from = arc.cursor;
+  const want = arc.beats.length - from;
+  if (want < 1) return 0;
+
+  const placeNames = Object.values(save.world.places)
+    .map((p) => p.name).filter((n) => !NOT_A_PLACE.test(n.trim()));
+  const played = arc.beats.slice(0, from)
+    .map((b) => `${b.idx + 1}. ${b.title} — ${b.job}${b.taken ? ` (and the player ${b.taken.charAt(0).toLowerCase()}${b.taken.slice(1)})` : ""}`)
+    .join("\n") || "(none — the route has not started)";
+  const app = save.dating.appetites[charId];
+
+  const volatile = [
+    `GENRE AND REGISTER: ${save.dating.register || "contemporary, adult"}`,
+    ``,
+    appetiteBrief(save.dating.heat.palette, save.dating.heat.explicitness, save.dating.heat.limits),
+    ``,
+    `THIS IS A REWRITE OF AN ARC ALREADY IN PLAY. Return ONE route, for ${char.name}, containing exactly ${want} beats — the remaining chapters and nothing else. Do not rewrite the chapters already played; they are listed only so the new ones follow from them. Keep the endings exactly as given.`,
+    ``,
+    `ALREADY PLAYED:\n${played}`,
+    ``,
+    `WHERE THE TWO OF THEM HAVE ACTUALLY GOT TO: ${rungLabel(arc.rung ?? 0)}. Write the remaining chapters from there. They do not go back to the beginning, and nothing that has already happened between them happens for the first time again.`,
+    ``,
+    `PLACES (use these names verbatim): ${placeNames.join(" · ")}`,
+    `${char.name}, ${char.age}. ${char.background}`,
+    app ? `Wants: ${app.into.join("; ")}\nWill not: ${app.limits.join("; ")}` : "",
+    `KEEP THESE ENDINGS EXACTLY AS THEY ARE: ${JSON.stringify(arc.terminals)}`,
+  ].filter(Boolean).join("\n");
+
+  let fresh: Beat[] = [];
+  let correction = "";
+  for (const m of [model, model, DEFAULT_MODELS.fallback_model]) {
+    try {
+      const out = await complete(
+        buildMessages(SPINE_SYSTEM, "RESPINE", volatile + correction, m), m, fb(m), true, 5000);
+      const got = safeJson<{ routes?: RawRoute[] }>(out.text, {});
+      const r = (got.routes ?? [])[0];
+      if (!r) continue;
+      const bad = spineComplaints([r], { explicitness: save.dating.heat.explicitness } as CastingInput);
+      if (bad.length) {
+        correction = `\n\nYOUR PREVIOUS ATTEMPT WAS REJECTED. Fix exactly these and return the whole thing again:\n${bad.map((x) => `- ${x}`).join("\n")}`;
+        continue;
+      }
+      const beats = normalizeBeats(r.beats, want, placeNames);
+      if (beats.length < Math.min(3, want)) continue;
+      fresh = beats;
+      break;
+    } catch { /* next model */ }
+  }
+  if (!fresh.length) return 0;
+
+  arc.beats = [
+    ...arc.beats.slice(0, from),
+    ...fresh.map((b, i) => ({ ...b, idx: from + i, status: (i === 0 ? "open" : "locked") as Beat["status"] })),
+  ];
+  const now = arc.beats[from];
+  if (now) {
+    now.entered_turn = save.world.current_turn;
+    delete now.heat_in;
+    save.dating.needs_opening = true;
+    if (now.rung_target != null) arc.rung = Math.max(arc.rung ?? 0, now.rung_target);
+  }
+  return fresh.length;
 }
 
 /** Commit to a route. Everything about the interface follows the accent from

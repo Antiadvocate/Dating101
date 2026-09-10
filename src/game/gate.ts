@@ -603,9 +603,32 @@ export function beatDirective(s: SaveState, arc: Arc, beat: Beat, layer: DatingL
     ``,
     `THE SCENE: ${beat.opening ?? beat.where}`,
     ``,
-    beat.heat === "sex" || beat.heat === "builds"
+    /* WHICH VERSION OF HER TO WRITE.
+     *
+     *  This used to key off the chapter's own label alone, and a save showed
+     *  what that costs. The ladder was at six — they had slept together — the
+     *  register was explicit, and the chapter happened to be labelled "none", so
+     *  the directive told the narrator to write somebody with her own evening
+     *  who does not exist to answer the player. The player said he had come over
+     *  to make out, said he wanted to kiss her, and kissed her hand, and she
+     *  made tea three turns running. She was doing exactly what she had been
+     *  told to do.
+     *
+     *  So the chapter's label is no longer the only input. Where the two of them
+     *  have actually got to outranks it. */
+    (beat.heat === "sex" || beat.heat === "builds" || (arc.rung ?? 0) >= 4)
       ? `Write ${other} as somebody who wants this too. She has thought about it, she can say so out loud, and she is able to start it herself. She can still be awkward about it, or particular, or find something funny, but she should never be sitting there waiting to be talked into anything.`
-      : `Write ${other} as a person with their own evening, their own irritations, and somewhere else they could be. They're allowed to be bored, distracted, unimpressed, or busy. They don't exist to answer the player, and they don't explain themselves at length unless somebody asks.`,
+      : `Write ${other} as a person with their own evening, their own irritations, and somewhere else they could be. They're allowed to be bored, distracted, unimpressed, or busy. They don't answer the player like a service, and they don't explain themselves at length unless somebody asks.`,
+
+    ...((arc.rung ?? 0) >= 5 ? [
+      `THEY HAVE ALREADY SLEPT TOGETHER. Whatever this chapter is nominally about, do not write them as though nothing has happened between them. Nothing physical is being negotiated for the first time, touching does not need a reason, and neither of them has to build up to anything.`,
+    ] : []),
+
+    /* THE ONE THAT MATTERS MOST ON AN EXPLICIT REGISTER, and which nothing was
+     *  saying: what she does when the player makes a move. */
+    ...(layer.heat?.explicitness === "explicit" ? [
+      `WHEN THE PLAYER MAKES A MOVE, ANSWER IT. If they say they came over to touch her, or that they want to kiss her, or they take her hand, that is the thing on the table and the scene is about it from that moment. She can refuse it — if it crosses one of her limits she refuses it flatly — and she can want it, and she can make it wait a minute while she puts something down. What she does not do is treat it as small talk and go back to what she was doing. Three passes in a row answered with a domestic errand is a scene that has failed, however well the errand is written.`,
+    ] : []),
     ...(beat.heat === "sex" ? [
       ``,
       arc.beats.some((b) => b.heat === "sex" && b.idx < beat.idx && b.status === "done")

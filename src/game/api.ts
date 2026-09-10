@@ -30,7 +30,7 @@ import { beatDirective, betweenChapters, consequenceFor, doorsFor, endingFor, ju
 import { voiceCorrection } from "./tics";
 import { isRefusal, noteOf } from "./refusal";
 import { adultAge, emptyAppetites, type Appetites } from "./appetite";
-import { runCasting, beginRoute, type CastingInput } from "./casting";
+import { runCasting, beginRoute, respine, type CastingInput } from "./casting";
 import { runTurn, resolvePlace } from "@weft/engine/turn";
 import { runInterlude } from "@weft/engine/continuity";
 
@@ -850,6 +850,17 @@ export async function rereadVoice(id: string): Promise<ClientSave> {
     await putSave(fresh);
   }
   return weft.save(id);
+}
+
+/** Rewrite the chapters that have not been played, against the relationship as
+ *  it actually stands. Played chapters keep their record. */
+export async function rebuildSpine(id: string): Promise<{ save: ClientSave; written: number }> {
+  const s = await need(id);
+  if (!isDating(s) || !s.dating.active) return { save: await weft.save(id), written: 0 };
+  const written = await respine(s, s.dating.active, bigModel(s));
+  await putSave(s);
+  if (!written) return { save: await weft.save(id), written: 0 };
+  return { save: await openBeat(id), written };
 }
 
 /** The model that gets work the first one declines. Empty is allowed and means
