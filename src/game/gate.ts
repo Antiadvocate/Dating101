@@ -26,7 +26,7 @@ import { activeArc, currentBeat } from "./types";
 import { heatOf, edgeToPlayer, OUTCOME_WORD } from "./arc";
 import { readOf } from "./read";
 import { NO_TROPES, NO_PURPLE, parseFaults, type VoiceFault } from "./tics";
-import { appetiteBlock, EXPLICITNESS, HARD_FLOOR, rungLabel } from "./appetite";
+import { appetiteBlock, EXPLICITNESS, HARD_FLOOR, RUNG_STEP, rungLabel } from "./appetite";
 import type { DatingLayer } from "./types";
 
 function safeJson<T>(text: string, fallback: T): T {
@@ -100,7 +100,13 @@ function bounds(layer: DatingLayer | undefined): string {
 
 const OPENING_SYSTEM = `You are setting a scene at the start of a chapter in a romance. You will be told what the chapter is FOR, where it is, roughly when, and where the relationship currently stands.
 
-Write the situation the player walks into, in two or three sentences of present tense. The player is "you" and everybody else is named. Say where they are, what time it is, what is already happening, and what the other person is doing when the player arrives. Leave the situation in motion at the end, and don't finish on a question or on somebody asking the player one.
+Write the situation the player walks into, in two or three sentences of present tense. The player is "you" and everybody else is named.
+
+SAY WHY THE PLAYER IS THERE. They did not appear out of nowhere and the reader has not seen the days in between, so one clause is enough — they were invited, they were passing, they said they would come by, she asked them to. A chapter that opens with the player simply standing in somebody's home with no account of how they got there reads as a scene missing its first half.
+
+THE CHAPTER TITLE MAY ASSUME THINGS THAT HAVE NOT HAPPENED. It was written before the story ran, so it can refer to a car nobody has been in or a habit nobody has formed yet. Where the title and the state disagree, the state wins — write the chapter the state supports and ignore whatever the title promised.
+
+If the two of them are alone, keep them alone. Do not introduce a friend, a colleague, a flatmate or a passerby who was not already in the scene; a third person in the room at the top of a chapter takes it over. Say where they are, what time it is, what is already happening, and what the other person is doing when the player arrives. Leave the situation in motion at the end, and don't finish on a question or on somebody asking the player one.
 
 ${NO_TROPES}
 
@@ -196,6 +202,7 @@ export async function judgeBeat(s: SaveState, model: string): Promise<Judgement>
   const arc = activeArc(s);
   const beat = currentBeat(arc);
   const was = arc?.rung ?? 0;
+  const step = RUNG_STEP[(s as { dating?: DatingLayer }).dating?.heat?.explicitness ?? "frank"] ?? 1;
   if (!arc || !beat) return { done: false, rung: was, revealed: [] };
   const volatile = [
     `THE JOB: ${beat.job}`,
@@ -209,10 +216,12 @@ export async function judgeBeat(s: SaveState, model: string): Promise<Judgement>
     const read = Math.round(Number(j.rung));
     return {
       done: j.done === true,
-      // Never below where it already was, and never more than one rung above:
-      // the ladder is the one thing standing between "she is interested" and a
-      // chapter that skips four steps because the model felt the mood was right.
-      rung: Math.max(was, Math.min(was + 1, Number.isFinite(read) ? Math.max(0, Math.min(6, read)) : was)),
+      // Never below where it already was, and never more than the register
+      // allows above it: the ladder is the one thing standing between "she is
+      // interested" and a chapter that skips four steps because the model felt
+      // the mood was right. How many steps that is comes from the explicitness
+      // setting — one for a slow burn, two when somebody asked for explicit.
+      rung: Math.max(was, Math.min(was + step, Number.isFinite(read) ? Math.max(0, Math.min(6, read)) : was)),
       revealed: (Array.isArray(j.revealed) ? j.revealed : [])
         .map((x) => String(x ?? "").trim()).filter(Boolean).slice(0, 4),
     };
@@ -487,6 +496,7 @@ export function beatDirective(s: SaveState, arc: Arc, beat: Beat, layer: DatingL
     `THE SCENE: ${beat.opening ?? beat.where}`,
     ``,
     `Write ${other} as a person with their own evening, their own irritations, and somewhere else they could be. They're allowed to be bored, distracted, unimpressed, or busy. They don't exist to answer the player, and they don't explain themselves at length unless somebody asks.`,
+    `This scene is between the player and ${other}. Don't bring in a friend, a flatmate, a colleague or a passerby who isn't already here — a third person in the room takes the scene over and it stops being about the two of them. Anybody who is genuinely present can be acknowledged, but they should have somewhere else to be and should go there.`,
     `Something should change every turn, even slightly — somebody moves, or arrives, or picks something up, or won't talk about something. If two people have been sitting in the same positions talking for three turns, the scene has stopped.`,
     ``,
     // The full contract, not the three-line summary that used to live here. The

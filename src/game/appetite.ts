@@ -77,6 +77,25 @@ export const EXPLICITNESS = {
 } as const;
 export type Explicitness = keyof typeof EXPLICITNESS;
 
+/**
+ * How many rungs of the physical ladder a single chapter may climb.
+ *
+ * It was one for everybody, which is right for a slow burn and wrong for what
+ * somebody asked for when they picked "explicit". They set the register to
+ * explicit and then found the pace unchanged, which is a fair complaint: the
+ * setting governed how a scene was written and had no say in how quickly the
+ * story was allowed to get anywhere.
+ *
+ * The rung is still measured off what actually happened on the page, so this
+ * raises a ceiling rather than forcing anything. Two people who spend a chapter
+ * arguing still end it where they started.
+ */
+export const RUNG_STEP: Record<Explicitness, number> = {
+  charged: 1,
+  frank: 1,
+  explicit: 2,
+};
+
 /* ── HOW FAR THINGS HAVE ACTUALLY GONE ───────────────────────────────────────
  *
  *  A ladder, tracked per route, and the reason it exists is that generated
@@ -211,7 +230,8 @@ export function appetiteBlock(
   const { rung, explicitness, limits } = opts;
 
   lines.push(`HOW FAR THIS HAS ACTUALLY GONE: ${rungLabel(rung)}. ${RUNGS[Math.max(0, Math.min(6, Math.round(rung)))].note}`);
-  lines.push(`This chapter can move that one step further at most, and only if the scene earns it. Don't skip ahead because the wanting is high — how much they want it is exactly what makes the next step worth anything. And don't write as though something has already happened when it hasn't.`);
+  const step = RUNG_STEP[explicitness] ?? 1;
+  lines.push(`This chapter can move that ${step === 1 ? "one step" : `${step} steps`} further at most, and only if the scene earns it. Don't skip ahead because the wanting is high — how much they want it is exactly what makes the next step worth anything. And don't write as though something has already happened when it hasn't.`);
 
   if (a) {
     if (a.into.length) lines.push(`WHAT ${who.toUpperCase()} WANTS, and would say so if asked directly: ${a.into.join("; ")}.`);

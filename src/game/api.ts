@@ -179,7 +179,7 @@ export async function openBeat(id: string): Promise<ClientSave> {
         her.location = pid;
         her.location_since = s.world.current_time;
       }
-      s.world.present = [arc.char_id];
+      clearTheRoom(s, arc.char_id, pid, `${beat.title} ${beat.job}`);
     }
   }
 
@@ -200,6 +200,39 @@ export async function openBeat(id: string): Promise<ClientSave> {
   await syncDirective(s);
   await putSave(s);
   return weft.save(id);
+}
+
+/**
+ * Get everybody else out of the chapter's location.
+ *
+ * Setting world.present did nothing, which took a real save to notice. Weft
+ * derives the scene purely from co-location — syncPresence throws away whatever
+ * is in `present` and rebuilds it from each character's own `location` field —
+ * so a colleague standing in the love interest's flat because the interlude or
+ * her schedule put her there is IN the scene, and the narrator writes her,
+ * correctly, because she is there. One save opened a chapter with a third
+ * person in the room pouring tea and explaining her own presence, and no
+ * instruction to the narrator could have stopped it.
+ *
+ * So the room is cleared in the state instead. Anyone the chapter actually
+ * names keeps their place, because a beat about what she is like around her
+ * brother needs the brother; everybody else is moved somewhere they could
+ * plausibly be, and the two people this story is about get the scene.
+ */
+function clearTheRoom(s: SaveState, herId: string, placeId: string, beatText: string): void {
+  const first = (n: string) => n.split(/\s+/)[0].replace(/[^\p{L}\p{N}]/gu, "");
+  const elsewhere = Object.keys(s.world.places).filter((p) => p !== placeId);
+  if (!elsewhere.length) return;
+  let n = 0;
+  for (const [cid, c] of Object.entries(s.characters)) {
+    if (cid === "char_player" || cid === herId) continue;
+    if (c.status === "dead" || c.status === "departed") continue;
+    if (c.location !== placeId) continue;
+    const name = first(c.name ?? "");
+    if (name && new RegExp(`\\b${name}\\b`, "i").test(beatText)) continue;
+    c.location = elsewhere[n++ % elsewhere.length];
+    c.location_since = s.world.current_time;
+  }
 }
 
 /** Rewrite the standing direction for whatever beat is live. Cheap, no calls. */
