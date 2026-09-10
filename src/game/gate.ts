@@ -25,7 +25,7 @@ import type { Arc, Beat, Door, Terminal } from "./types";
 import { activeArc, currentBeat } from "./types";
 import { heatOf, edgeToPlayer, OUTCOME_WORD } from "./arc";
 import { readOf } from "./read";
-import { NO_TROPES, NO_PURPLE } from "./tics";
+import { NO_TROPES, NO_PURPLE, parseFaults, type VoiceFault } from "./tics";
 import { appetiteBlock, EXPLICITNESS, HARD_FLOOR, rungLabel } from "./appetite";
 import type { DatingLayer } from "./types";
 
@@ -348,21 +348,20 @@ Be strict about what you quote and generous about letting ordinary writing pass.
 
 Output ONE strict JSON object: {"faults":[{"quote":"the sentence, verbatim","why":"under ten words"}]}`;
 
-export interface VoiceFault { quote: string; why: string }
-
-export async function voiceCheck(prose: string, model: string): Promise<VoiceFault[]> {
+export async function voiceCheck(prose: string, model: string, speakers: string[] = []): Promise<VoiceFault[]> {
   const text = (prose ?? "").trim();
   if (text.length < 120) return [];
+  const volatile = [
+    speakers.length ? `People who might be speaking here: ${speakers.join(", ")}.` : "",
+    ``,
+    text.slice(0, 4000),
+  ].filter(Boolean).join("\n");
   try {
     const out = await complete(
-      buildMessages(VOICE_SYSTEM, "VOICE", text.slice(0, 4000), model),
+      buildMessages(VOICE_SYSTEM, "VOICE", volatile, model),
       model, model, true, 420,
     );
-    const j = safeJson<{ faults?: { quote?: unknown; why?: unknown }[] }>(out.text, {});
-    return (j.faults ?? [])
-      .map((f) => ({ quote: String(f?.quote ?? "").trim(), why: String(f?.why ?? "").trim() }))
-      .filter((f) => f.quote && text.includes(f.quote.slice(0, 24)))
-      .slice(0, 3);
+    return parseFaults(safeJson<unknown>(out.text, null), text);
   } catch { return []; }
 }
 

@@ -27,7 +27,7 @@ import { DEFAULT_MODELS } from "@weft/engine/types";
 import { activeArc, currentBeat, isDating, type DatingLayer, type Door, type Keepsake } from "./types";
 import { enterBeat, gateCheck, heatOf, openGate, resolveTerminal, takeDoor, terminalOf } from "./arc";
 import { beatDirective, doorsFor, endingFor, judgeBeat, openingFor, voiceCheck } from "./gate";
-import { findTics, ticCorrection } from "./tics";
+import { voiceCorrection } from "./tics";
 import { adultAge, emptyAppetites, type Appetites } from "./appetite";
 import { runCasting, beginRoute, type CastingInput } from "./casting";
 
@@ -66,6 +66,16 @@ function smallModel(s: SaveState): string {
 }
 function bigModel(s: SaveState): string {
   return s.model_settings.narrator_model || DEFAULT_MODELS.narrator_model;
+}
+
+/** The voice reader's slot. Weft keeps a fifth model setting for small
+ *  single-purpose calls and this is exactly that shape, so it rides there when
+ *  it is set and falls back to the bookkeeper when it is not. It matters more
+ *  than it used to: this call is the only thing standing between the narrator
+ *  and its own habits now, so it is worth being able to point it somewhere
+ *  better than whatever is doing the JSON. */
+function readerModel(s: SaveState): string {
+  return s.model_settings.reviser_model || smallModel(s);
 }
 
 /* ── SAVES ───────────────────────────────────────────────────────────────────*/
@@ -176,10 +186,7 @@ async function syncDirective(s: SaveState): Promise<void> {
   const arc = activeArc(s);
   const beat = currentBeat(arc);
   if (!arc || !beat || !isDating(s)) return;
-  const last = s.history[s.history.length - 1];
-  const owed = last
-    ? ticCorrection(findTics(last.narrator_prose ?? ""), s.dating.last_faults ?? [])
-    : "";
+  const owed = voiceCorrection(s.dating.last_faults ?? []);
   s.world_bible.narrator_direction = [
     beatDirective(s, arc, beat, s.dating),
     owed,
@@ -236,10 +243,18 @@ async function afterTurn(id: string, ev: PlayEvents): Promise<void> {
      in any story, a face doing something unnamed. Quoted back next turn. */
   const written = s.history[s.history.length - 1]?.narrator_prose ?? "";
   if (written) {
-    const faults = await voiceCheck(written, smallModel(s));
+    const speakers = Object.values(s.characters)
+      .filter((c) => c.character_id !== "char_player" && s.world.present.includes(c.character_id))
+      .map((c) => c.name);
+    const faults = await voiceCheck(written, readerModel(s), speakers);
     const withFaults = await need(id);
     if (isDating(withFaults)) {
       withFaults.dating.last_faults = faults.length ? faults : undefined;
+      // A real record, so the studio can report what the reader actually found
+      // instead of a number derived from patterns that matched nothing.
+      const log = (withFaults.dating.voice_log ??= []);
+      log.push({ turn: withFaults.world.current_turn, found: faults.length });
+      if (log.length > 40) log.splice(0, log.length - 40);
       await putSave(withFaults);
     }
   }
@@ -588,6 +603,26 @@ export async function reopenRoute(id: string): Promise<ClientSave> {
   delete arc.ending_prose;
   delete arc.ended_turn;
   await putSave(s);
+  return weft.save(id);
+}
+
+/** Run the voice reader again over the turn already written. The findings land
+ *  where the automatic ones do, so they show in the studio and get quoted back
+ *  on the next turn. */
+export async function rereadVoice(id: string): Promise<ClientSave> {
+  const s = await need(id);
+  if (!isDating(s)) return weft.save(id);
+  const written = s.history[s.history.length - 1]?.narrator_prose ?? "";
+  if (!written) return weft.save(id);
+  const speakers = Object.values(s.characters)
+    .filter((c) => c.character_id !== "char_player" && s.world.present.includes(c.character_id))
+    .map((c) => c.name);
+  const faults = await voiceCheck(written, readerModel(s), speakers);
+  const fresh = await need(id);
+  if (isDating(fresh)) {
+    fresh.dating.last_faults = faults.length ? faults : undefined;
+    await putSave(fresh);
+  }
   return weft.save(id);
 }
 

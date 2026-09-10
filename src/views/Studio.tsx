@@ -6,7 +6,6 @@ import { type Save } from "../game/types";
 import { EXPLICITNESS, type Explicitness } from "../game/appetite";
 import { Field, Mark } from "../ui/kit";
 import { ModelPicker } from "../ui/ModelPicker";
-import { ticRate } from "../game/tics";
 
 /**
  * STUDIO — the key, the four models, and how it looks.
@@ -68,7 +67,10 @@ export default function Studio({ save, setSave, onClose }: {
     setTimeout(() => setSaved(false), 1800);
   };
 
-  const rate = save ? ticRate(save.history) : 0;
+  /* Measured, not inferred. The reader runs on every turn and records what it
+     found; this is the share of the last dozen turns it flagged something on. */
+  const log = (save?.dating.voice_log ?? []).slice(-12);
+  const flagged = log.filter((l) => l.found > 0).length;
 
   return (
     <div className="scroll fade-top" style={{ height: "100%", padding: "74px 20px 60px" }}>
@@ -149,10 +151,30 @@ export default function Studio({ save, setSave, onClose }: {
             <div className="ui" style={{ fontSize: 13, lineHeight: 1.7, color: "var(--ink-mid)" }}>
               Turn {save.world.current_turn} · {save.history.length} entries · {save.dating.keepsakes.length} pictures kept
               <br />
-              {rate > 0
-                ? <>Romance tics caught in the last dozen turns: <strong>{Math.round(rate * 100)}%</strong> of them. Each one is quoted back at the narrator on the following turn.</>
-                : <>No romance tics in the last dozen turns.</>}
+              {log.length === 0
+                ? <>The voice reader hasn't seen a turn yet.</>
+                : flagged === 0
+                ? <>The voice reader has found nothing in the last {log.length} turns.</>
+                : <>The voice reader flagged something on <strong>{flagged}</strong> of the last {log.length} turns, and each one was quoted back at the narrator on the turn after.</>}
             </div>
+            {!!save.dating.last_faults?.length && (
+              <div style={{ marginTop: 16 }}>
+                <div className="label" style={{ marginBottom: 7 }}>from the last turn</div>
+                <div style={{ display: "grid", gap: 10 }}>
+                  {save.dating.last_faults.map((f, i) => (
+                    <div key={i} style={{ paddingLeft: 12, borderLeft: "2px solid var(--accent-line)" }}>
+                      <div className="prose" style={{ fontSize: 14, lineHeight: 1.5 }}>“{f.quote}”</div>
+                      <div className="ui" style={{ fontSize: 11.5, color: "var(--ink-lo)", marginTop: 2 }}>{f.why}</div>
+                    </div>
+                  ))}
+                </div>
+                <div className="ui" style={{ fontSize: 11.5, color: "var(--ink-faint)", marginTop: 10, lineHeight: 1.55 }}>
+                  These are shown so you can tell whether the reader is being sensible. If it keeps
+                  flagging writing you actually wanted, point it at a better model, or edit the rules
+                  in src/game/tics.ts.
+                </div>
+              </div>
+            )}
           </div>
         )}
 

@@ -195,6 +195,10 @@ export interface DatingLayer {
    *  engine that reliably changes behaviour — a rule in the system prompt gets
    *  read as reference, a sentence you just wrote gets read as a mistake. */
   last_faults?: { quote: string; why: string }[];
+  /** How many faults the reader found on each recent turn. The studio's voice
+   *  gauge reads this, so the number on screen is something that was actually
+   *  measured. */
+  voice_log?: { turn: number; found: number }[];
 }
 
 export type DatingSave = SaveState & { dating: DatingLayer };

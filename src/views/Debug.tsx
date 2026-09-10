@@ -4,7 +4,7 @@ import { RUNGS, rungLabel } from "../game/appetite";
 import { heatOf } from "../game/arc";
 import {
   forceEnding, forceGate, jumpToBeat, load, reopenRoute, revealAppetites,
-  rewriteOpening, rollback, setGodMode, setRung, setTime, weft,
+  rereadVoice, rewriteOpening, rollback, setGodMode, setRung, setTime, weft,
 } from "../game/api";
 import { Mark } from "../ui/kit";
 
@@ -177,6 +177,11 @@ export default function Debug({ save, setSave, onEdit, onPlay }: {
           <button className="btn" disabled={!!busy}
             onClick={() => run("god mode", () => setGodMode(save.id, !save.world_bible.god_mode))}>
             {save.world_bible.god_mode ? "Turn god mode off" : "Turn god mode on"}
+          </button>
+        </Row>
+        <Row note="Runs the voice reader over the turn just written and shows what it found in the studio. Useful for working out whether it is judging sensibly before you trust it.">
+          <button className="btn" disabled={!!busy} onClick={() => run("reread voice", () => rereadVoice(save.id))}>
+            {busy === "reread voice" ? "…" : "Re-read the last turn"}
           </button>
         </Row>
         <Row note="The bookkeeper estimates elapsed time off the prose and it drifts. This is the correction.">
