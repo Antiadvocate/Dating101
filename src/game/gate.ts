@@ -426,7 +426,25 @@ export async function voiceCheck(prose: string, model: string, speakers: string[
 export function beatDirective(s: SaveState, arc: Arc, beat: Beat, layer: DatingLayer): string {
   const other = arc.name;
   const register = layer.register;
+  const turnsIn = s.world.current_turn - (beat.entered_turn ?? s.world.current_turn);
+
+  /* THE FIRST TURNS OF A CHAPTER NEED TO BE TOLD THEY ARE THE FIRST TURNS.
+     Weft replays the previous few turns to the narrator, and at a chapter
+     boundary those turns are the end of a conversation that finished days ago.
+     Left to itself the model reads the most recent thing in its context and
+     continues it, which produced a save where chapter two opened mid-exchange
+     in chapter one's coffee shop while the clock said four days had passed.
+     The interlude in the history helps; saying it outright helps more. */
+  const fresh = turnsIn <= 1 ? [
+    `THIS IS THE OPENING OF A NEW CHAPTER, AND IT IS NOT A CONTINUATION.`,
+    `${beat.when} has passed since the last scene, and this one happens at ${beat.where || "somewhere else"}. The conversation that was going on at the end of the last chapter is over. It ended, both of them went home, and time has gone by since.`,
+    `Do not pick that conversation back up, do not answer a question that was left hanging in it, and do not write anybody carrying on as though no time has passed. If something was left unresolved, it has been sitting there for ${beat.when} and both of them have had time to think about it or go quiet about it.`,
+    `Open on where they are now.`,
+    ``,
+  ] : [];
+
   return [
+    ...fresh,
     `THIS IS A ROMANCE, AND ${other.toUpperCase()} IS ITS SUBJECT. The story is what happens between the player and ${other}. Keep ${other} in the scene and keep the scene between them; the rest of the world is texture unless the player reaches for it.`,
     register ? `REGISTER: ${register}.` : "",
     ``,

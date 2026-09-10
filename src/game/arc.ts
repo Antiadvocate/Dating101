@@ -263,3 +263,34 @@ export function spineFrames(arc: Arc): {
     door: beat.taken,
   }));
 }
+
+/* ── HOW LONG BETWEEN CHAPTERS ───────────────────────────────────────────── */
+
+const WORD_NUMBERS: Record<string, number> = {
+  a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7,
+  eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, couple: 2, few: 3, several: 4,
+};
+
+/** How long a chapter's `when` phrase says has passed. The old version only read
+ *  digits, so "four days later" parsed as the default two — which mattered less
+ *  than it sounds, because the gap was being applied by nudging the clock and
+ *  nothing else. Returns minutes. */
+export function skipMinutes(when: string): number {
+  const w = (when ?? "").toLowerCase();
+  const count = (): number => {
+    const digit = w.match(/\b(\d{1,2})\b/);
+    if (digit) return Number(digit[1]);
+    // Longest word first, or the articles win: "a couple of days" matches the
+    // "a" before it ever reaches "couple", and a two-day gap becomes one.
+    for (const [word, n] of Object.entries(WORD_NUMBERS).sort((x, y) => y[0].length - x[0].length)) {
+      if (new RegExp(`\\b${word}\\b`).test(w)) return n;
+    }
+    return 0;
+  };
+  const n = count();
+  if (/month/.test(w)) return (n || 1) * 43200;
+  if (/week/.test(w)) return (n || 1) * 10080;
+  if (/day|tomorrow|following|next/.test(w)) return (n || 2) * 1440;
+  if (/hour|later that|same night|afterward|that evening/.test(w)) return (n || 3) * 60;
+  return 900;
+}

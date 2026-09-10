@@ -25,12 +25,13 @@ import { advance as advanceClock } from "@weft/engine/time";
 import type { ActionMode, SaveState } from "@weft/engine/types";
 import { DEFAULT_MODELS } from "@weft/engine/types";
 import { activeArc, currentBeat, isDating, type DatingLayer, type Door, type Keepsake } from "./types";
-import { enterBeat, gateCheck, heatOf, openGate, resolveTerminal, takeDoor, terminalOf } from "./arc";
+import { enterBeat, gateCheck, heatOf, openGate, resolveTerminal, skipMinutes, takeDoor, terminalOf } from "./arc";
 import { beatDirective, consequenceFor, doorsFor, endingFor, judgeBeat, openingFor, voiceCheck } from "./gate";
 import { voiceCorrection } from "./tics";
 import { adultAge, emptyAppetites, type Appetites } from "./appetite";
 import { runCasting, beginRoute, type CastingInput } from "./casting";
-import { runTurn } from "@weft/engine/turn";
+import { runTurn, resolvePlace } from "@weft/engine/turn";
+import { runInterlude } from "@weft/engine/continuity";
 
 const uid = (p: string) => `${p}_${Math.random().toString(36).slice(2, 10)}`;
 
@@ -160,16 +161,21 @@ export async function openBeat(id: string): Promise<ClientSave> {
   // Put the player where the beat says they are. The place may not exist yet —
   // resolvePlace inside Weft creates it on first mention, so a beat set
   // somewhere the forge did not build still works.
+  /* PUT THEM BOTH IN THE NEW PLACE. resolvePlace creates one on first mention,
+     so a chapter set somewhere the forge never built still works — which is the
+     difference between a scene that opens where it says it does and one that
+     silently opens wherever the last one ended. */
   if (beat.where) {
-    const hit = Object.values(s.world.places).find(
-      (p) => p.name.toLowerCase() === beat.where.toLowerCase(),
-    );
-    if (hit) {
-      s.world.player_location = hit.id;
-      beat.place_id = hit.id;
-      // and put her there too, or the first turn opens with an empty room
+    const pid = resolvePlace(s, beat.where);
+    if (pid) {
+      s.world.player_location = pid;
+      beat.place_id = pid;
       const her = s.characters[arc.char_id];
-      if (her) her.location = hit.id;
+      if (her) {
+        her.location = pid;
+        her.location_since = s.world.current_time;
+      }
+      s.world.present = [arc.char_id];
     }
   }
 
@@ -339,19 +345,6 @@ function recordRevealed(app: Appetites, revealed: string[]): void {
 
 /* ── WALKING THROUGH A DOOR ──────────────────────────────────────────────────*/
 
-/** Rough elapsed time from a beat's `when` phrase. Deliberately crude: the
- *  point is that a chapter set "the following week" does not open four minutes
- *  after the last one ended, not that the calendar is exact. */
-function skipMinutes(when: string): number {
-  const w = when.toLowerCase();
-  const num = Number((w.match(/\b(\d{1,2})\b/) ?? [])[1] ?? 0);
-  if (/month/.test(w)) return (num || 1) * 43200;
-  if (/week/.test(w)) return (num || 1) * 10080;
-  if (/day|tomorrow|following|next/.test(w)) return (num || 2) * 1440;
-  if (/hour|later that|same night|afterward/.test(w)) return (num || 3) * 60;
-  return 900; // a bit over half a day: enough that it is plainly a new scene
-}
-
 export interface DoorResult {
   save: ClientSave;
   /** What happened when the player did the thing they chose. Belongs to the
@@ -416,8 +409,31 @@ export async function walkThrough(id: string, doorId: string, onPhase: (p: strin
     return { save: await weft.save(id), ending: { kind, title: terminal.title, prose } };
   }
 
-  // Move the clock so the next chapter is plainly a different night.
-  s.world.current_time = advanceClock(s.world.current_time, skipMinutes(next.when));
+  /* LET THE TIME ACTUALLY PASS.
+     This used to be one line that added minutes to the clock, and the result was
+     a save where chapter two opened mid-sentence in chapter one's conversation.
+     Nudging a number does nothing to the thing that decides what gets written:
+     Weft replays the last few turns to the narrator, so the most recent thing in
+     its context was a live exchange in a coffee shop, and it simply carried on
+     with it. The clock said four days had passed and the page said otherwise.
+
+     Weft already has the right machinery. runInterlude moves the world forward
+     deterministically — people pursue their drives, clocks tick, the cast goes
+     where their week says they should be — and writes a "four days pass" entry
+     into history, which is what the narrator then sees as the most recent thing
+     instead of an unfinished conversation. */
+  const minutes = skipMinutes(next.when);
+  const days = Math.floor(minutes / 1440);
+  if (days >= 1) {
+    onPhase(days === 1 ? "a day passes" : `${days} days pass`);
+    try {
+      await runInterlude(s, Math.min(30, days), { onPhase: () => {} });
+    } catch {
+      s.world.current_time = advanceClock(s.world.current_time, minutes);
+    }
+  } else {
+    s.world.current_time = advanceClock(s.world.current_time, minutes);
+  }
   s.world.scene_started_time = s.world.current_time;
   void heat;
   await putSave(s);
