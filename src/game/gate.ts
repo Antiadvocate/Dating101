@@ -38,6 +38,26 @@ function safeJson<T>(text: string, fallback: T): T {
 
 const uid = (p: string) => `${p}_${Math.random().toString(36).slice(2, 10)}`;
 
+/**
+ * A fallback that is actually a different model.
+ *
+ * Every call in this layer was passing its own model as its fallback, copied
+ * from a pattern in Weft's forge. complete() has a whole recovery ladder behind
+ * it — drop the schema, re-enable reasoning, then route to the fallback — and
+ * the last rung reads "only if it's genuinely a different model", so handing it
+ * the same id disabled the one step most likely to save the call.
+ */
+function fb(model: string): string {
+  return model === DEFAULT_MODELS.fallback_model
+    ? DEFAULT_MODELS.simulator_model
+    : DEFAULT_MODELS.fallback_model;
+}
+
+/** The reason the last small call failed, kept so the game can say what went
+ *  wrong instead of only that something did. Written by the wrappers below and
+ *  read by openBeat. */
+export let lastCallError = "";
+
 /** The last few turns as plain text — the only story context any of these calls
  *  gets. Two turns is enough to judge a beat and keeps the call small. */
 function recent(s: SaveState, n = 2): string {
@@ -114,19 +134,26 @@ export async function openingFor(s: SaveState, model: string): Promise<{ opening
      plain "the model call failed" placeholder into a brand new chapter one —
      which is the first thing a player reads in a new game. The opening is one
      small call and it is worth buying twice. */
-  for (const m of [model, model, DEFAULT_MODELS.fallback_model]) {
+  lastCallError = "";
+  for (const m of [model, DEFAULT_MODELS.fallback_model]) {
     try {
-      const out = await complete(buildMessages(OPENING_SYSTEM, "SCENE", volatile, m), m, m, true, 900);
+      const out = await complete(buildMessages(OPENING_SYSTEM, "SCENE", volatile, m), m, fb(m), true, 900);
       const j = safeJson<{ opening?: string; time?: string; title_line?: string }>(out.text, {});
       const opening = String(j.opening ?? "").trim();
       if (opening) {
+        lastCallError = "";
         return {
           opening,
           time: String(j.time ?? "").trim(),
           title_line: String(j.title_line ?? "").trim(),
         };
       }
-    } catch { /* try the next one */ }
+      // A call that returned but carried no opening is a different failure from
+      // one that threw, and it is the one a bare retry will not fix.
+      lastCallError = `${m} answered without an opening (${(out.text ?? "").trim().slice(0, 90) || "empty response"})`;
+    } catch (e: any) {
+      lastCallError = `${m}: ${e?.message ?? "call failed"}`;
+    }
   }
   return null;
 }
@@ -177,7 +204,7 @@ export async function judgeBeat(s: SaveState, model: string): Promise<Judgement>
     `THE SCENE SO FAR:\n${recent(s, 2)}`,
   ].join("\n");
   try {
-    const out = await complete(buildMessages(JUDGE_SYSTEM, "JUDGE", volatile, model), model, model, true, 320);
+    const out = await complete(buildMessages(JUDGE_SYSTEM, "JUDGE", volatile, model), model, fb(model), true, 320);
     const j = safeJson<{ done?: boolean; rung?: unknown; revealed?: unknown }>(out.text, {});
     const read = Math.round(Number(j.rung));
     return {
@@ -245,7 +272,7 @@ export async function doorsFor(s: SaveState, model: string, because: "discharged
   let doors: Door[] = [];
   for (const m of [model, model, DEFAULT_MODELS.fallback_model]) {
     try {
-      const out = await complete(buildMessages(DOORS_SYSTEM, "DOORS", volatile, m), m, m, true, 900);
+      const out = await complete(buildMessages(DOORS_SYSTEM, "DOORS", volatile, m), m, fb(m), true, 900);
       const raw = safeJson<{ doors?: { label?: string; read?: string; bearing?: string }[] }>(out.text, {});
       doors = (raw.doors ?? [])
         .map((d) => ({
@@ -307,7 +334,7 @@ export async function endingFor(s: SaveState, arc: Arc, terminal: Terminal, mode
   ].join("\n");
 
   try {
-    const out = await complete(buildMessages(ENDING_SYSTEM, "ENDING", volatile, model), model, model, false, 1600);
+    const out = await complete(buildMessages(ENDING_SYSTEM, "ENDING", volatile, model), model, fb(model), false, 1600);
     return out.text.trim();
   } catch {
     return `${terminal.description}\n\n(The ending could not be written — the model call failed. Everything that happened is still in the journal, and you can try again from the spine.)`;
@@ -358,7 +385,7 @@ export async function consequenceFor(
   try {
     const out = await complete(
       buildMessages(CONSEQUENCE_SYSTEM, "CONSEQUENCE", volatile, model),
-      model, model, false, 900,
+      model, fb(model), false, 900,
     );
     return out.text.trim();
   } catch { return ""; }
@@ -416,7 +443,7 @@ export async function voiceCheck(prose: string, model: string, speakers: string[
   try {
     const out = await complete(
       buildMessages(VOICE_SYSTEM, "VOICE", volatile, model),
-      model, model, true, 420,
+      model, fb(model), true, 420,
     );
     return parseFaults(safeJson<unknown>(out.text, null), text);
   } catch { return []; }

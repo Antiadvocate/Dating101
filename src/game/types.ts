@@ -199,6 +199,10 @@ export interface DatingLayer {
    *  gauge reads this, so the number on screen is something that was actually
    *  measured. */
   voice_log?: { turn: number; found: number }[];
+  /** Why the last chapter opening had to be written by hand instead of by a
+   *  model. Survives a reload, unlike the in-memory error ring, so it is still
+   *  there when somebody comes back to ask what went wrong. */
+  opening_error?: string;
 }
 
 export type DatingSave = SaveState & { dating: DatingLayer };

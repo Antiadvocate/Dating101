@@ -203,7 +203,14 @@ export default function Scene({ save, setSave, onOpenSpine }: {
         <div className="scroll fade-top" style={{ flex: 1, minWidth: 0, paddingTop: 76 }}>
 
           {beat.opening && (
-            <Opening beat={beat} onZoom={setLightbox} />
+            <Opening beat={beat} onZoom={setLightbox}
+              error={save.dating.opening_error}
+              onRewrite={async () => {
+                setPhase("writing the opening");
+                const { rewriteOpening } = await import("../game/api");
+                try { setSave(await rewriteOpening(save.id) as Save); }
+                finally { setPhase(""); }
+              }} />
           )}
 
           {page.map((h) => (
@@ -321,7 +328,9 @@ export default function Scene({ save, setSave, onOpenSpine }: {
 /* ── THE CHAPTER'S ESTABLISHING BLOCK ──────────────────────────────────────
    Set apart from the narration around it: an epigraph, in the display face,
    with the chapter's picture beside it if one has been drawn. */
-function Opening({ beat, onZoom }: { beat: Beat; onZoom: (s: string) => void }) {
+function Opening({ beat, onZoom, error, onRewrite }: {
+  beat: Beat; onZoom: (s: string) => void; error?: string; onRewrite: () => void;
+}) {
   return (
     <div style={{ marginBottom: 34 }}>
       <div style={{ display: "flex", gap: 20, alignItems: "flex-start", flexWrap: "wrap", maxWidth: "var(--measure)" }}>
@@ -337,6 +346,18 @@ function Opening({ beat, onZoom }: { beat: Beat; onZoom: (s: string) => void }) 
           </div>
         )}
       </div>
+      {/* An opening written by the fallback rather than by a model. It used to
+          say only that the call had failed, which is no use to anybody trying
+          to work out why — least of all to me, looking at a screenshot of it. */}
+      {error && (
+        <div style={{ marginTop: 16, paddingLeft: 13, borderLeft: "2px solid var(--rule-strong)", maxWidth: "var(--measure)" }}>
+          <div className="label" style={{ marginBottom: 4 }}>this opening was not written by a model</div>
+          <div className="ui" style={{ fontSize: 12, color: "var(--ink-lo)", lineHeight: 1.55, marginBottom: 9 }}>
+            {error}
+          </div>
+          <button className="chip" onClick={onRewrite}>try writing it again</button>
+        </div>
+      )}
       <div style={{ height: 1, background: "var(--rule)", margin: "26px 0 0", maxWidth: "var(--measure)" }} />
     </div>
   );

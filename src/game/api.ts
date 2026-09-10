@@ -26,7 +26,7 @@ import type { ActionMode, SaveState } from "@weft/engine/types";
 import { DEFAULT_MODELS } from "@weft/engine/types";
 import { activeArc, currentBeat, isDating, type DatingLayer, type Door, type Keepsake } from "./types";
 import { enterBeat, gateCheck, heatOf, openGate, resolveTerminal, skipMinutes, takeDoor, terminalOf } from "./arc";
-import { beatDirective, consequenceFor, doorsFor, endingFor, judgeBeat, openingFor, voiceCheck } from "./gate";
+import { beatDirective, consequenceFor, doorsFor, endingFor, judgeBeat, lastCallError, openingFor, voiceCheck } from "./gate";
 import { voiceCorrection } from "./tics";
 import { adultAge, emptyAppetites, type Appetites } from "./appetite";
 import { runCasting, beginRoute, type CastingInput } from "./casting";
@@ -154,7 +154,11 @@ export async function openBeat(id: string): Promise<ClientSave> {
          rewrite it in one tap once the model is answering again. */
       const her = s.characters[arc.char_id];
       const place = beat.where || s.world.places[s.world.player_location]?.name || "where you were";
-      beat.opening = `${beat.when.charAt(0).toUpperCase()}${beat.when.slice(1)}. You are at ${place}${her ? `, and ${her.name} is here` : ""}. (The opening for this chapter could not be written — the model call failed. Rewrite it from the console, or just start.)`;
+      beat.opening = `${beat.when.charAt(0).toUpperCase()}${beat.when.slice(1)}. You are at ${place}${her ? `, and ${her.name} is here` : ""}.`;
+      // Keep the reason. "The model call failed" told nobody anything — not the
+      // player, and not me when they showed me a screenshot of it. The console
+      // prints this, and the scene prints it under the opening.
+      s.dating.opening_error = lastCallError || "the model call returned nothing usable";
     }
   }
 
@@ -191,6 +195,7 @@ export async function openBeat(id: string): Promise<ClientSave> {
     return weft.save(id);
   }
 
+  if (beat.opening && !s.dating.opening_error) delete s.dating.opening_error;
   s.dating.needs_opening = false;
   await syncDirective(s);
   await putSave(s);

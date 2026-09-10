@@ -7,6 +7,7 @@ import {
   rereadVoice, rewriteOpening, rollback, setGodMode, setRung, setTime, weft,
 } from "../game/api";
 import { Mark } from "../ui/kit";
+import { llmErrors } from "@weft/llm";
 
 /**
  * THE CONSOLE.
@@ -216,6 +217,38 @@ export default function Debug({ save, setSave, onEdit, onPlay }: {
         {!!raw && (
           <textarea className="field" rows={16} value={raw} onChange={(e) => setRaw(e.target.value)}
             style={{ fontFamily: "ui-monospace, monospace", fontSize: 11.5, lineHeight: 1.5 }} />
+        )}
+
+        {/* WHAT THE MODELS ACTUALLY SAID WHEN THEY FAILED.
+            Weft has kept a ring buffer of these the whole time and nothing in
+            this app ever showed it, so every failed call surfaced as "the model
+            call failed" and the reason — a refusal, a bad key, no credit, a
+            provider 400 — was sitting in memory unread. */}
+        <Mark accent>Recent model errors</Mark>
+        {llmErrors.length === 0 ? (
+          <div className="ui" style={{ fontSize: 12.5, color: "var(--ink-faint)", lineHeight: 1.6, marginBottom: 30 }}>
+            Nothing has failed since this page was loaded. This list is in memory only, so a reload
+            empties it.
+          </div>
+        ) : (
+          <div style={{ display: "grid", gap: 10, marginBottom: 30 }}>
+            {[...llmErrors].reverse().slice(0, 8).map((e, i) => (
+              <div key={i} style={{ paddingLeft: 12, borderLeft: "2px solid var(--rule-strong)" }}>
+                <div className="label" style={{ marginBottom: 2 }}>
+                  {e.model} · {new Date(e.at).toLocaleTimeString()}
+                </div>
+                <div className="ui" style={{ fontSize: 12, color: "var(--ink-mid)", lineHeight: 1.5 }}>{e.message}</div>
+              </div>
+            ))}
+          </div>
+        )}
+        {!!save.dating.opening_error && (
+          <div style={{ marginTop: -18, marginBottom: 30, paddingLeft: 12, borderLeft: "2px solid var(--accent-line)" }}>
+            <div className="label label-accent" style={{ marginBottom: 2 }}>last chapter opening</div>
+            <div className="ui" style={{ fontSize: 12, color: "var(--ink-mid)", lineHeight: 1.5 }}>
+              {save.dating.opening_error}
+            </div>
+          </div>
         )}
 
         {!!log.length && (
