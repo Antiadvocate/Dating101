@@ -84,6 +84,34 @@ export default function Debug({ save, setSave, onEdit, onPlay }: {
           </div>
         </div>
 
+        {/* Sits directly under the state read-out because it is the first
+            thing anybody reaches for when something has gone wrong, and it
+            spent one release buried below a sixteen-row JSON textarea where
+            nobody found it. Snapshots are stripped on the way out — they are
+            device-local rollback copies and most of the file size. */}
+        <Mark accent>Export this save</Mark>
+        <Row note="Everything: the spine, every beat and what it was for, the whole cast with their locations and appetites, the relationship numbers, and the full history. This is the thing to attach to a bug report.">
+          <button className="btn btn-ink" disabled={!!busy}
+            onClick={() => run("export", async () => {
+              const { name, json } = await weft.exportSave(save.id);
+              const url = URL.createObjectURL(new Blob([json], { type: "application/json" }));
+              const a = document.createElement("a");
+              a.href = url; a.download = `${name || "dating101"}.json`;
+              document.body.appendChild(a); a.click(); a.remove();
+              setTimeout(() => URL.revokeObjectURL(url), 2000);
+            })}>
+            {busy === "export" ? "…" : "Download it"}
+          </button>
+          <button className="btn" disabled={!!busy}
+            onClick={() => run("copy", async () => {
+              const { json } = await weft.exportSave(save.id);
+              await navigator.clipboard.writeText(json);
+            })}>
+            {busy === "copy" ? "…" : "Copy to clipboard"}
+          </button>
+        </Row>
+
+
         {arc && (
           <>
             {/* ── THE CHAPTER ───────────────────────────────────────────── */}
@@ -224,35 +252,6 @@ export default function Debug({ save, setSave, onEdit, onPlay }: {
             this app ever showed it, so every failed call surfaced as "the model
             call failed" and the reason — a refusal, a bad key, no credit, a
             provider 400 — was sitting in memory unread. */}
-        {/* THE WHOLE SAVE, AS A FILE.
-            Weft has had this since long before this project and I never ported
-            it, so a nonsensical storyline could only be reported by retyping it
-            into a chat window. Everything is in here — the spine, the beats and
-            their jobs, every character with their appetites and limits, the
-            edges, the locations, the full history. Snapshots are stripped
-            because they are device-local rollback copies and most of the size. */}
-        <Mark accent>The save, as a file</Mark>
-        <Row note="Everything: the spine, every beat and what it was for, the whole cast with their locations and appetites, the relationship numbers, and the full history. This is the thing to attach to a bug report.">
-          <button className="btn btn-ink" disabled={!!busy}
-            onClick={() => run("export", async () => {
-              const { name, json } = await weft.exportSave(save.id);
-              const url = URL.createObjectURL(new Blob([json], { type: "application/json" }));
-              const a = document.createElement("a");
-              a.href = url; a.download = `${name || "dating101"}.json`;
-              document.body.appendChild(a); a.click(); a.remove();
-              setTimeout(() => URL.revokeObjectURL(url), 2000);
-            })}>
-            {busy === "export" ? "…" : "Download it"}
-          </button>
-          <button className="btn" disabled={!!busy}
-            onClick={() => run("copy", async () => {
-              const { json } = await weft.exportSave(save.id);
-              await navigator.clipboard.writeText(json);
-            })}>
-            {busy === "copy" ? "…" : "Copy to clipboard"}
-          </button>
-        </Row>
-
         <Mark accent>Recent model errors</Mark>
         {llmErrors.length === 0 ? (
           <div className="ui" style={{ fontSize: 12.5, color: "var(--ink-faint)", lineHeight: 1.6, marginBottom: 30 }}>
